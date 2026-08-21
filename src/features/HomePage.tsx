@@ -78,7 +78,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
       <div className="daily-command__glow" aria-hidden="true" />
       <div className="daily-command__copy">
         <div className="daily-command__meta"><span>Plan week {week}</span><span>{prettyDate(today, true)}</span></div>
-        <p className="eyebrow">Daily command center</p>
+        <p className="eyebrow">Project 75 · {profile.goalWeightKg} kg mission</p>
         <h1>Good morning, {profile.name}.</h1>
         <p className="daily-objective">Today’s objective: <strong>{workoutDay.isRestDay ? 'recover, move, and stay consistent' : `${displayWorkoutTitle(workoutDay).toLowerCase()} with controlled effort`}</strong>.</p>
         <button className="primary-button command-action" type="button" onClick={action.run}><ActionIcon size={19} /> {action.label}<ArrowRight size={18} /></button>

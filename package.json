@@ -1,11 +1,11 @@
 {
-  "name": "cut-forward-health-app",
+  "name": "project-75-health-app",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/scrub-build-secrets.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run"

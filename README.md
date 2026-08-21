@@ -1,4 +1,6 @@
-# Cut Forward
+# Project 75
+
+Personal food, fitness, and progress coaching built around one clear outcome: reaching 75 kg while preserving strength and building sustainable habits.
 
 A polished personal food and strength coaching app built around one outcome: lose body fat while preserving or building muscle.
 
@@ -35,7 +37,7 @@ The live app was also tested in-browser at desktop width and at 375 px, 390 px, 
 
 ## Persistence
 
-The prototype uses versioned `localStorage` under `cut-forward-data-v1`. The data model is split into profile, food log, saved meals, weight entries, workout program, workout sessions, sets, and habits so it can be migrated to a backend later without rewriting the UI workflows.
+The app keeps its versioned `localStorage` under the legacy key `cut-forward-data-v1` so existing Project 75 records survive the product rename. The data model is split into profile, food log, saved meals, weight entries, workout program, workout sessions, sets, and habits so it can be migrated to a backend later without rewriting the UI workflows.
 
 ## Visual asset
 

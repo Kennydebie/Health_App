@@ -107,7 +107,7 @@ export function ProgressPage({ controller }: ProgressPageProps) {
 
     <section className="progress-hero card" hidden={progressTab !== 'overview' && progressTab !== 'body'}>
       <div className="goal-orbit" style={{ '--goal-progress': `${weightProgress * 3.6}deg` } as CSSProperties}><div><strong>{Math.round(weightProgress)}%</strong><span>to goal</span></div></div>
-      <div className="progress-hero__copy"><p className="eyebrow">Body-weight journey</p><h2>{trend.currentAverage ? trend.currentAverage.toFixed(1) : '—'} kg</h2><p><strong>{data.profile.startWeightKg} kg</strong> start <span>→</span> <strong>{data.profile.goalWeightKg} kg</strong> goal</p><div className="pace-badge"><TrendingDown size={16} /> {Math.abs(weightChange).toFixed(2)} kg/week <span>seven-day average pace</span></div></div>
+      <div className="progress-hero__copy"><p className="eyebrow">Project 75 journey</p><h2>{trend.currentAverage ? trend.currentAverage.toFixed(1) : '—'} kg</h2><p><strong>{data.profile.startWeightKg} kg</strong> start <span>→</span> <strong>{data.profile.goalWeightKg} kg</strong> goal</p><div className="pace-badge"><TrendingDown size={16} /> {Math.abs(weightChange).toFixed(2)} kg/week <span>seven-day average pace</span></div></div>
       <div className="progress-hero__consistency"><span>Weekly consistency</span><strong>{consistency.percent}%</strong><p>{consistency.strength} of {consistency.plannedStrength} strength sessions · {consistency.cardioMinutes} cardio min</p></div>
     </section>
 

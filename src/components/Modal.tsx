@@ -24,7 +24,7 @@ export function Modal({ open, onClose, title, subtitle, children, wide = false }
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className={`modal-sheet ${wide ? 'modal-sheet--wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby="modal-title">
         <header className="modal-header">
-          <div><p className="eyebrow">Cut Forward</p><h2 id="modal-title">{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>
+          <div><p className="eyebrow">Project 75</p><h2 id="modal-title">{title}</h2>{subtitle ? <p>{subtitle}</p> : null}</div>
           <button className="icon-button" type="button" onClick={onClose} aria-label="Close"><X size={20} /></button>
         </header>
         <div className="modal-body">{children}</div>

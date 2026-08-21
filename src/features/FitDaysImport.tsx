@@ -202,7 +202,7 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
       </div>
       <input ref={galleryInput} hidden type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" onChange={(event) => { const file = event.target.files?.[0]; if (file) void analyzeFile(file); }} />
       <input ref={cameraInput} hidden type="file" accept="image/*" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void analyzeFile(file); }} />
-      <p className="fitdays-privacy"><LockKeyhole size={14} /> Processed securely with OpenAI vision. Cut Forward does not save the image, it is not used for model training, and it never changes your goals.</p>
+      <p className="fitdays-privacy"><LockKeyhole size={14} /> Processed securely with OpenAI vision. Project 75 does not save the image, it is not used for model training, and it never changes your goals.</p>
     </div> : null}
 
     {step === 'analyzing' ? <div className="fitdays-processing">

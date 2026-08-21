@@ -25,7 +25,7 @@ export function AppShell({ page, setPage, children, name, planWeek, trainingStre
     <div className="app-shell">
       <aside className="sidebar">
         <button className="brand" type="button" onClick={() => setPage('home')} aria-label="Go home">
-          <span className="brand-mark"><Sparkles size={18} /></span><span><strong>CUT</strong> FORWARD</span>
+          <span className="brand-mark"><Sparkles size={18} /></span><span><strong>PROJECT</strong> 75</span>
         </button>
         <nav aria-label="Primary navigation">
           {navItems.map(({ id, label, Icon }) => <button key={id} type="button" data-page={id} aria-label={label} aria-current={page === id ? 'page' : undefined} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon size={20} /><span>{label}</span></button>)}
