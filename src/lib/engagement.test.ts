@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createSeedData } from '../data/seed';
 import { recalculateTrainingWeek } from './adaptivePlanner';
-import { activePlanWeek, dailyScore, datesInCalendarMonth, datesInWeek, displayWorkoutTitle, getWeekSnapshot, personalRecordEvents, trainingWeekStreak, weeklyConsistency } from './engagement';
+import { activePlanWeek, datesInCalendarMonth, datesInWeek, displayWorkoutTitle, getWeekSnapshot, personalRecordEvents } from './engagement';
+import { getCurrentStreak, getWeeklyConsistency } from './selectors';
 
 describe('engagement helpers', () => {
   it('uses plain-language workout names without changing stored titles', () => {
@@ -25,8 +26,9 @@ describe('engagement helpers', () => {
     const data = createSeedData();
     const lastDemoDate = data.measurements.at(-1)!.measuredAt!.slice(0, 10);
     expect(activePlanWeek(data.measurements, lastDemoDate)).toBe(1);
-    expect(trainingWeekStreak(data.sessions, data.sessions.at(-1)!.date)).toBeGreaterThan(0);
-    const consistency = weeklyConsistency(data, data.sessions.at(-1)!.date);
+    const streak = getCurrentStreak(data, data.sessions.at(-1)!.date);
+    expect(streak.explanation).toContain('completed calendar week');
+    const consistency = getWeeklyConsistency(data, data.sessions.at(-1)!.date);
     expect(consistency.percent).toBeGreaterThanOrEqual(0);
     expect(consistency.percent).toBeLessThanOrEqual(100);
   });
@@ -47,7 +49,7 @@ describe('engagement helpers', () => {
     expect(week.days[4]).toMatchObject({ date: '2026-08-21', status: 'completed' });
     expect(week.days[4].completedSession?.id).toBe('renamed');
     expect(week.completedStrength).toBe(1);
-    expect(weeklyConsistency(data, '2026-08-21').strength).toBe(1);
+    expect(getWeeklyConsistency(data, '2026-08-21').strength).toBe(1);
   });
 
   it('does not complete a session card for an active or unfinished workout', () => {
@@ -77,14 +79,4 @@ describe('engagement helpers', () => {
     expect(week.days[3].status).toBe('missed');
   });
 
-  it('calculates the daily score from an explicit 20/25/15/30/10 breakdown', () => {
-    const data = createSeedData();
-    const date = '2026-08-17';
-    data.foodLog = [{ ...data.foodLog[0], date }];
-    data.sessions = [{ ...data.sessions[0], date, completedAt: '2026-08-17T12:00:00Z' }];
-    data.habits = [{ date, water: true, walk: true, sleep: true }];
-    const score = dailyScore(data, date, { calories: 2000, protein: 170 });
-    expect(score.items.map((item) => item.max)).toEqual([20, 25, 15, 30, 10]);
-    expect(score.total).toBe(100);
-  });
 });

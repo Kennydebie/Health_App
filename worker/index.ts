@@ -1,10 +1,12 @@
 import { sanitizeFitDaysDraft } from '../src/lib/fitdays';
+import { DataConflictError, readUserData, writeUserData, type D1Database } from './dataStore';
 import type { BodyMeasurementConfidence, BodyMeasurementValues } from '../src/types/models';
 
 interface Env {
   OPENAI_API_KEY?: string;
   OPENAI_VISION_MODEL?: string;
   FITDAYS_SESSION_SECRET?: string;
+  DB?: D1Database;
 }
 
 interface RateWindow { count: number; resetAt: number; }
@@ -14,6 +16,7 @@ const SESSION_TTL_MS = 10 * 60_000;
 const ANALYSIS_LIMIT = 10;
 const ANALYSIS_WINDOW_MS = 60 * 60_000;
 const MAX_ENCODED_IMAGE_LENGTH = 16 * 1024 * 1024;
+const MAX_DATA_BODY_LENGTH = 4 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 
 const numericProperties = {
@@ -97,10 +100,11 @@ async function signature(value: string, secret: string) {
   return toBase64Url(new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value))));
 }
 
-function requestSubject(request: Request) {
-  return request.headers.get('oai-authenticated-user-id')
-    ?? request.headers.get('cf-connecting-ip')
-    ?? 'local-browser';
+function authenticatedUserId(request: Request) {
+  const userId = request.headers.get('oai-authenticated-user-id');
+  if (userId) return userId;
+  const hostname = new URL(request.url).hostname;
+  return hostname === '127.0.0.1' || hostname === 'localhost' ? 'local-development' : null;
 }
 
 function isSameSite(request: Request) {
@@ -112,8 +116,10 @@ function isSameSite(request: Request) {
 
 async function issueSession(request: Request, env: Env) {
   if (!env.FITDAYS_SESSION_SECRET) return json({ code: 'ai_unavailable' }, 503);
+  const subject = authenticatedUserId(request);
+  if (!subject) return json({ code: 'auth_required' }, 401);
   const now = Date.now();
-  const subjectBinding = (await signature(requestSubject(request), env.FITDAYS_SESSION_SECRET)).slice(0, 24);
+  const subjectBinding = (await signature(subject, env.FITDAYS_SESSION_SECRET)).slice(0, 24);
   const payload = encodeText(JSON.stringify({ iat: now, exp: now + SESSION_TTL_MS, nonce: crypto.randomUUID(), sub: subjectBinding }));
   const signed = await signature(payload, env.FITDAYS_SESSION_SECRET);
   return json({ token: `${payload}.${signed}`, expiresAt: new Date(now + SESSION_TTL_MS).toISOString() });
@@ -121,6 +127,8 @@ async function issueSession(request: Request, env: Env) {
 
 async function verifySession(request: Request, env: Env) {
   if (!env.FITDAYS_SESSION_SECRET) return false;
+  const subject = authenticatedUserId(request);
+  if (!subject) return false;
   const token = request.headers.get('x-fitdays-session');
   if (!token) return false;
   const [payload, suppliedSignature, extra] = token.split('.');
@@ -133,7 +141,7 @@ async function verifySession(request: Request, env: Env) {
   try {
     const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
     const parsed = JSON.parse(new TextDecoder().decode(Uint8Array.from(decoded, (char) => char.charCodeAt(0)))) as { exp?: number; sub?: string };
-    const subjectBinding = (await signature(requestSubject(request), env.FITDAYS_SESSION_SECRET)).slice(0, 24);
+    const subjectBinding = (await signature(subject, env.FITDAYS_SESSION_SECRET)).slice(0, 24);
     return typeof parsed.exp === 'number' && parsed.exp >= Date.now() && parsed.exp <= Date.now() + SESSION_TTL_MS && parsed.sub === subjectBinding;
   } catch {
     return false;
@@ -159,8 +167,9 @@ function extractOutputText(payload: { output_text?: unknown; output?: Array<{ co
 
 async function analyzeScreenshot(request: Request, env: Env) {
   if (!env.OPENAI_API_KEY || !env.FITDAYS_SESSION_SECRET) return json({ code: 'ai_unavailable' }, 503);
+  const subject = authenticatedUserId(request);
+  if (!subject) return json({ code: 'auth_required' }, 401);
   if (!await verifySession(request, env)) return json({ code: 'invalid_session' }, 401);
-  const subject = requestSubject(request);
   if (!withinRateLimit(subject)) return json({ code: 'rate_limited' }, 429);
 
   let body: { image?: unknown };
@@ -203,9 +212,55 @@ async function analyzeScreenshot(request: Request, env: Env) {
   }
 }
 
+function accountFor(request: Request, userId: string) {
+  return { id: userId, email: request.headers.get('oai-authenticated-user-email') };
+}
+
+async function getUserData(request: Request, env: Env) {
+  const userId = authenticatedUserId(request);
+  if (!userId) return json({ code: 'auth_required' }, 401);
+  if (!env.DB) return json({ code: 'persistence_unavailable' }, 503);
+  try {
+    const snapshot = await readUserData(env.DB, userId);
+    return json({ ...snapshot, account: accountFor(request, userId) });
+  } catch {
+    return json({ code: 'persistence_unavailable' }, 503);
+  }
+}
+
+async function putUserData(request: Request, env: Env) {
+  const userId = authenticatedUserId(request);
+  if (!userId) return json({ code: 'auth_required' }, 401);
+  if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+  if (!env.DB) return json({ code: 'persistence_unavailable' }, 503);
+  const contentLength = Number(request.headers.get('content-length') ?? 0);
+  if (contentLength > MAX_DATA_BODY_LENGTH) return json({ code: 'payload_too_large' }, 413);
+  let body: { data?: unknown; baseRevision?: unknown; clientMutationId?: unknown };
+  try {
+    const raw = await request.text();
+    if (raw.length > MAX_DATA_BODY_LENGTH) return json({ code: 'payload_too_large' }, 413);
+    body = JSON.parse(raw) as typeof body;
+  }
+  catch { return json({ code: 'invalid_request' }, 400); }
+  if (!body.data || !Number.isInteger(body.baseRevision) || Number(body.baseRevision) < 0 || typeof body.clientMutationId !== 'string' || body.clientMutationId.length > 100) {
+    return json({ code: 'invalid_request' }, 400);
+  }
+  try {
+    const snapshot = await writeUserData(env.DB, userId, body.data as never, Number(body.baseRevision), body.clientMutationId);
+    return json({ ...snapshot, account: accountFor(request, userId) });
+  } catch (error) {
+    if (error instanceof DataConflictError) return json({ code: 'conflict', remote: { ...error.snapshot, account: accountFor(request, userId) } }, 409);
+    if (error instanceof TypeError) return json({ code: 'invalid_data' }, 400);
+    return json({ code: 'persistence_unavailable' }, 503);
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
+    if (url.pathname === '/api/data' && request.method === 'GET') return getUserData(request, env);
+    if (url.pathname === '/api/data' && request.method === 'PUT') return putUserData(request, env);
+    if (url.pathname.startsWith('/api/data')) return json({ code: 'not_found' }, 404);
     if (url.pathname === '/api/fitdays/session' && request.method === 'GET') {
       if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
       return issueSession(request, env);

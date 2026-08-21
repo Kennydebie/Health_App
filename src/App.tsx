@@ -1,9 +1,10 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { AppShell, type Page } from './components/AppShell';
 import { useAppData } from './state/useAppData';
 import type { SessionTemplateId } from './types/models';
 import { PageSkeleton } from './components/Visuals';
-import { activePlanWeek, trainingWeekStreak } from './lib/engagement';
+import { DataMigrationModal } from './features/DataBackups';
+import { getDashboardSummary } from './lib/selectors';
 
 const HomePage = lazy(() => import('./features/HomePage').then((module) => ({ default: module.HomePage })));
 const FoodPage = lazy(() => import('./features/FoodPage').then((module) => ({ default: module.FoodPage })));
@@ -16,6 +17,7 @@ export default function App() {
   const [page, setPage] = useState<Page>('home');
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [profileDirty, setProfileDirty] = useState(false);
+  const summary = useMemo(() => getDashboardSummary(controller.data), [controller.data]);
 
   const navigate = (nextPage: Page) => {
     if (page === 'profile' && nextPage !== 'profile' && profileDirty && !window.confirm('You have unsaved profile changes. Leave without saving?')) return;
@@ -29,8 +31,8 @@ export default function App() {
     setPage('workout');
   };
 
-  return (
-    <AppShell page={page} setPage={navigate} name={controller.data.profile.name} planWeek={activePlanWeek(controller.data.measurements)} trainingStreak={trainingWeekStreak(controller.data.sessions)}>
+  return <>
+    <AppShell page={page} setPage={navigate} name={controller.data.profile.name} planWeek={summary.planWeek} trainingStreak={summary.streak.weeks}>
       <Suspense fallback={<PageSkeleton />}>
         {page === 'home' ? <HomePage controller={controller} setPage={setPage} onStartWorkout={startWorkout} /> : null}
         {page === 'food' ? <FoodPage controller={controller} /> : null}
@@ -39,5 +41,6 @@ export default function App() {
         {page === 'profile' ? <ProfilePage controller={controller} onDirtyChange={setProfileDirty} /> : null}
       </Suspense>
     </AppShell>
-  );
+    <DataMigrationModal controller={controller} />
+  </>;
 }

@@ -1,15 +1,15 @@
-import { useState, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Activity, Award, BedDouble, Check, Droplets, Dumbbell, Footprints, Medal, Plus, Scale, Sparkles, Target, TrendingDown, Trophy } from 'lucide-react';
 import { ToneIcon } from '../components/Visuals';
 import { FitDaysImport } from './FitDaysImport';
 import { BodyCompositionDashboard } from './BodyCompositionDashboard';
 import { exerciseMap } from '../data/exercises';
-import { datesInWeek, getWeekSnapshot, personalRecordEvents, weeklyConsistency, weeklyVolumeSeries } from '../lib/engagement';
+import { datesInWeek, weeklyVolumeSeries } from '../lib/engagement';
 import { prettyDate, shiftDate, toDateKey } from '../lib/date';
-import { average, weightTrend } from '../lib/progress';
-import { currentWeight, goalProgressPercentage, startingWeight, weightHistory } from '../lib/bodyMeasurements';
+import { average } from '../lib/progress';
 import type { AppController } from '../state/useAppData';
+import { getDashboardSummary } from '../lib/selectors';
 
 interface ProgressPageProps { controller: AppController; }
 type ProgressTab = 'overview' | 'body' | 'training' | 'nutrition';
@@ -19,16 +19,17 @@ const CHART_TOOLTIP_STYLE = { background: '#101a20', border: '1px solid rgba(116
 export function ProgressPage({ controller }: ProgressPageProps) {
   const { data, saveWeight, totalsForDate, updateHabit } = controller;
   const [weightDate, setWeightDate] = useState(toDateKey());
-  const canonicalCurrentWeight = currentWeight(data.measurements);
-  const canonicalStartingWeight = startingWeight(data.measurements);
+  const today = toDateKey();
+  const dashboard = useMemo(() => getDashboardSummary(data, today), [data, today]);
+  const canonicalCurrentWeight = dashboard.body.currentWeight;
+  const canonicalStartingWeight = dashboard.body.startingWeight;
   const [weight, setWeight] = useState(canonicalCurrentWeight == null ? '' : String(canonicalCurrentWeight));
   const [waist, setWaist] = useState('');
   const exerciseIds = [...new Set(data.sessions.flatMap((session) => session.sets.map((set) => set.exerciseId)))];
   const [exerciseId, setExerciseId] = useState(exerciseIds[0] ?? 'bench-press');
   const [saved, setSaved] = useState(false);
   const [progressTab, setProgressTab] = useState<ProgressTab>(() => (localStorage.getItem('cut-forward-progress-tab') as ProgressTab | null) ?? 'overview');
-  const trend = weightTrend(data.measurements);
-  const today = toDateKey();
+  const trend = dashboard.body.trend;
   const last7 = datesInWeek(today);
 
   const currentTotals = last7.map(totalsForDate);
@@ -37,15 +38,15 @@ export function ProgressPage({ controller }: ProgressPageProps) {
   const averageProtein = average(loggedTotals.map((item) => item.protein));
   const withinTarget = currentTotals.filter((item) => item.calories > 0 && item.calories <= data.profile.calorieTarget + 100).length;
   const proteinDays = currentTotals.filter((item) => item.protein >= data.profile.proteinTarget * .95).length;
-  const weekSnapshot = getWeekSnapshot(data, today);
+  const weekSnapshot = dashboard.training;
   const completedWorkouts = weekSnapshot.completedStrength;
   const allCompletedWorkouts = data.sessions.filter((session) => session.completedAt).length;
   const plannedWorkouts = weekSnapshot.plannedStrength;
   const previousAvgWeight = trend.previousAverage;
   const weightChange = trend.weeklyChange;
-  const weightMeasurementCount = weightHistory(data.measurements).length;
-  const consistency = weeklyConsistency(data, today);
-  const records = personalRecordEvents(data.sessions);
+  const weightMeasurementCount = dashboard.body.measurementCount;
+  const consistency = dashboard.weekly;
+  const records = dashboard.personalRecords;
   const volumeSeries = weeklyVolumeSeries(data.sessions, today, 6);
 
   const cardioSeries = volumeSeries.map((item) => {
@@ -86,7 +87,7 @@ export function ProgressPage({ controller }: ProgressPageProps) {
     return [{ date: session.date.slice(5), weight: best.weightKg, reps: best.reps, volume: sets.reduce((sum, set) => sum + set.weightKg * set.reps, 0) }];
   });
   const habit = data.habits.find((entry) => entry.date === today) ?? { date: today, water: false, walk: false, sleep: false };
-  const weightProgress = goalProgressPercentage(data.measurements, data.profile.goalWeightKg);
+  const weightProgress = dashboard.body.goalProgress;
   const validWeight = Number(weight) > 30 && Number(weight) < 300;
   const lostKg = canonicalStartingWeight == null || canonicalCurrentWeight == null ? 0 : Math.max(0, canonicalStartingWeight - canonicalCurrentWeight);
   const milestones = [
@@ -107,7 +108,7 @@ export function ProgressPage({ controller }: ProgressPageProps) {
     <section className="progress-hero card" hidden={progressTab !== 'overview'}>
       <div className="goal-orbit" style={{ '--goal-progress': `${weightProgress * 3.6}deg` } as CSSProperties}><div><strong>{Math.round(weightProgress)}%</strong><span>to goal</span></div></div>
       <div className="progress-hero__copy"><p className="eyebrow">Weight goal</p><h2>{trend.currentAverage ? trend.currentAverage.toFixed(1) : '—'} kg</h2><p><strong>{canonicalStartingWeight == null ? '—' : canonicalStartingWeight.toFixed(1)} kg</strong> start <span>→</span> <strong>{data.profile.goalWeightKg} kg</strong> goal</p><div className="pace-badge"><TrendingDown size={16} /> {weightMeasurementCount >= 2 && previousAvgWeight ? `${Math.abs(weightChange).toFixed(2)} kg/week` : 'Not enough data'} <span>seven-day average change</span></div></div>
-      <div className="progress-hero__consistency"><span>Weekly consistency</span><strong>{consistency.percent}%</strong><p>{consistency.strength} of {consistency.plannedStrength} strength sessions · {consistency.cardioMinutes} cardio min</p></div>
+      <div className="progress-hero__consistency"><span>Weekly consistency</span><strong>{consistency.percent}%</strong><p>{consistency.completed} of {consistency.due} due goals · {consistency.strength} strength sessions · {consistency.cardioMinutes} cardio min</p></div>
     </section>
 
     <section className="progress-metrics premium-metrics" hidden={progressTab !== 'overview'}>

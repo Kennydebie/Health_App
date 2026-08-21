@@ -1,196 +1,273 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createSeedData } from '../data/seed';
-import { defaultProgram } from '../data/exercises';
-import { foodMap } from '../data/foods';
-import { addMacros, entryMacros } from '../lib/nutrition';
 import { uid } from '../lib/id';
 import { buildProgramTemplate } from '../lib/workout';
-import { DEFAULT_BODY_GOALS, withDetectedOutliers } from '../lib/bodyMeasurements';
-import { DEFAULT_TRAINING_PLANNER, dayIdForDate, moveTrainingSession as movePlannerSession, recalculateTrainingWeek, restoreRecommendedWeek as restorePlannerWeek, selectTrainingSession as selectPlannerSession, workoutTemplate } from '../lib/adaptivePlanner';
+import { withDetectedOutliers } from '../lib/bodyMeasurements';
+import { dayIdForDate, moveTrainingSession as movePlannerSession, recalculateTrainingWeek, restoreRecommendedWeek as restorePlannerWeek, selectTrainingSession as selectPlannerSession, workoutTemplate } from '../lib/adaptivePlanner';
 import { toDateKey } from '../lib/date';
 import { createWeightLossPlan } from '../lib/weightLossPlan';
-import { DEFAULT_NUTRITION_SETTINGS, detectedTimezone, nutritionTargetFromProfile, upsertTargetSnapshot } from '../lib/nutritionEvaluation';
-import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementConfidence, BodyMeasurementDraft, BodyMetricKey, CardioEntry, DailyNutritionTargetSnapshot, FoodLogEntry, HabitEntry, LoggedSet, MealType, NutritionDayRecord, NutritionEvaluationSettings, ProgressionPlan, ReadinessResponse, SessionTemplateId, SquatProgressionLevel, TrainingDayPlan, TrainingPlannerState, TrainingSelectionSource, TrainingTemplate, UserProfile, WeightLossPlan, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
+import { detectedTimezone, nutritionTargetFromProfile, upsertTargetSnapshot } from '../lib/nutritionEvaluation';
+import { createProject75Repository, RepositoryError, type RemoteSnapshot } from '../repository/project75Repository';
+import { appDataFingerprint, hasMeaningfulData, mergeAppData, stripProductionFixtures, summarizeAppData, type DataSummary } from '../lib/appDataIntegrity';
+import { createBackup, inspectBackup, backupToAppData, type BackupPreview, type Project75Backup } from '../lib/backup';
+import { applyBodyMeasurement } from '../lib/dataTransactions';
+import { getNutritionTotals } from '../lib/selectors';
+import { emptyMeasurementValues } from '../lib/appDataMigration';
+import { createInitialData } from '../data/initialData';
+import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementDraft, BodyMetricKey, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, NutritionDayRecord, NutritionEvaluationSettings, ProgressionPlan, ReadinessResponse, SessionTemplateId, SquatProgressionLevel, TrainingDayPlan, TrainingSelectionSource, TrainingTemplate, UserProfile, WorkoutDay, WorkoutSession } from '../types/models';
 
-const STORAGE_KEY = 'cut-forward-data-v1';
+export { migrateAppData } from '../lib/appDataMigration';
 
-const workoutIds = new Set<WorkoutId>(['upper_a', 'lower_a', 'upper_b', 'lower_b', 'full_body_a', 'full_body_b', 'full_body_c']);
+const repository = typeof window === 'undefined' ? null : createProject75Repository();
 
-export function inferWorkoutId(
-  source: Pick<WorkoutDay, 'id' | 'title'> & { workoutId?: WorkoutId },
-  template: TrainingTemplate = 'four-day-upper-lower',
-): WorkoutId | undefined {
-  if (source.workoutId && workoutIds.has(source.workoutId)) return source.workoutId;
-  const title = source.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  if (title.includes('full body c')) return 'full_body_c';
-  if (title.includes('full body b')) return 'full_body_b';
-  if (title.includes('full body a')) return 'full_body_a';
-  if (/\bupper\s*b\b/.test(title)) return 'upper_b';
-  if (/\blower\s*b\b/.test(title)) return 'lower_b';
-  if (/\bupper\s*a\b/.test(title)) return 'upper_a';
-  if (/\blower\s*a\b/.test(title)) return 'lower_a';
-  if (template === 'four-day-upper-lower') {
-    const byDay: Partial<Record<WorkoutDay['id'], WorkoutId>> = { monday: 'upper_a', tuesday: 'lower_a', thursday: 'upper_b', saturday: 'lower_b' };
-    return byDay[source.id];
-  }
-  if (source.id === 'monday') return 'full_body_a';
-  if (source.id === 'thursday') return 'full_body_b';
-  if (template === 'three-day-full-body' && source.id === 'saturday') return 'full_body_c';
-  return undefined;
-}
+export type SyncStatus = 'checking' | 'auth_required' | 'migration_required' | 'syncing' | 'synced' | 'offline' | 'unavailable' | 'conflict_resolved' | 'local_only';
 
-interface LegacyWeightEntry {
-  id: string;
-  date: string;
-  weightKg: number;
-  recordedAt?: string;
-  source?: 'manual' | 'fitdays_ai_image';
-  sourceMeasurementId?: string;
-}
-
-type LegacyMeasurement = Partial<BodyMeasurement> & {
-  timestamp?: string | null;
-  bodyWaterKg?: number | null;
-  confidence?: BodyMeasurementConfidence & { timestamp?: number | null };
-};
-
-type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals' | 'weightLossPlans' | 'trainingPlanner' | 'nutritionTargetHistory' | 'nutritionSettings' | 'nutritionDayRecords'> & {
-  profile: UserProfile & { startWeightKg?: number; currentWeightKg?: number };
-  measurements?: LegacyMeasurement[];
-  bodyMeasurements?: LegacyMeasurement[];
-  weights?: LegacyWeightEntry[];
-  bodyGoals?: Partial<BodyGoalSettings>;
-  weightLossPlans?: WeightLossPlan[];
-  nutritionTargetHistory?: DailyNutritionTargetSnapshot[];
-  nutritionSettings?: Partial<NutritionEvaluationSettings>;
-  nutritionDayRecords?: NutritionDayRecord[];
-  trainingPlanner?: Partial<TrainingPlannerState>;
-};
-
-const emptyMeasurementValues = {
-  weightKg: null, bmi: null, bodyFatPercent: null, fatMassKg: null, fatFreeMassKg: null,
-  muscleMassKg: null, musclePercent: null, skeletalMusclePercent: null, boneMassKg: null,
-  proteinMassKg: null, proteinPercent: null, waterMassKg: null, bodyWaterPercent: null,
-  subcutaneousFatPercent: null, visceralFatIndex: null, bmrKcal: null, bodyAge: null,
-  waistCircumferenceCm: null,
-};
-
-function canonicalMeasurement(measurement: LegacyMeasurement): BodyMeasurement {
-  const legacyConfidence = measurement.confidence;
-  const confidence = legacyConfidence ? { ...legacyConfidence, measuredAt: legacyConfidence.measuredAt ?? legacyConfidence.timestamp ?? null } : undefined;
-  if (confidence && 'timestamp' in confidence) delete (confidence as { timestamp?: number | null }).timestamp;
-  const { timestamp, bodyWaterKg, ...canonical } = measurement;
-  return {
-    ...emptyMeasurementValues,
-    ...canonical,
-    id: measurement.id ?? uid('measurement'),
-    measuredAt: measurement.measuredAt ?? timestamp ?? null,
-    waterMassKg: measurement.waterMassKg ?? bodyWaterKg ?? null,
-    source: measurement.source ?? 'fitdays_ai_image',
-    createdAt: measurement.createdAt ?? new Date().toISOString(),
-    ...(confidence ? { confidence } : {}),
-  };
-}
-
-export function migrateAppData(saved: AppData | LegacyAppData): AppData {
-  const legacy = saved as LegacyAppData;
-  const needsProgramUpgrade = legacy.version < 4 || legacy.program.length !== 7;
-  const profile = { ...legacy.profile };
-  delete profile.startWeightKg;
-  delete profile.currentWeightKg;
-  const importedMeasurements = [...(legacy.measurements ?? legacy.bodyMeasurements ?? [])].map(canonicalMeasurement);
-  const representedWeightIds = new Set(importedMeasurements.map((measurement) => measurement.id));
-  const legacyWeights = (legacy.weights ?? []).flatMap((weight): BodyMeasurement[] => {
-    if (weight.sourceMeasurementId && representedWeightIds.has(weight.sourceMeasurementId)) return [];
-    return [{
-      ...emptyMeasurementValues,
-      id: weight.id,
-      measuredAt: weight.recordedAt ?? `${weight.date}T12:00:00`,
-      weightKg: weight.weightKg,
-      source: weight.source ?? 'manual',
-      createdAt: weight.recordedAt ?? `${weight.date}T12:00:00`,
-      isDemo: weight.id.startsWith('demo_weight_'),
-    }];
-  });
-  const combinedMeasurements = [...importedMeasurements, ...legacyWeights];
-  const measurements = withDetectedOutliers(combinedMeasurements.some((measurement) => !measurement.isDemo)
-    ? combinedMeasurements.filter((measurement) => !measurement.isDemo)
-    : combinedMeasurements);
-  const firstNutritionDate = legacy.foodLog.map((entry) => entry.date).sort()[0] ?? toDateKey();
-  const nutritionTargetHistory = legacy.nutritionTargetHistory?.length
-    ? legacy.nutritionTargetHistory
-    : [nutritionTargetFromProfile(profile as UserProfile, firstNutritionDate, detectedTimezone())];
-  const withoutLegacyCollections = { ...legacy };
-  delete withoutLegacyCollections.weights;
-  delete withoutLegacyCollections.bodyMeasurements;
-  const base: AppData = {
-    ...withoutLegacyCollections,
-    profile: {
-      ...profile,
-      trainingDays: profile.trainingDays ?? ['Monday', 'Tuesday', 'Thursday', 'Saturday'],
-      balanceLevel: profile.balanceLevel ?? 'beginner',
-      trainingTemplate: profile.trainingTemplate ?? 'four-day-upper-lower',
-    },
-    program: needsProgramUpgrade ? structuredClone(defaultProgram) : legacy.program,
-    measurements,
-    bodyGoals: { ...DEFAULT_BODY_GOALS, ...legacy.bodyGoals, version: 1 },
-    weightLossPlans: legacy.weightLossPlans ?? [],
-    nutritionTargetHistory,
-    nutritionSettings: {
-      ...DEFAULT_NUTRITION_SETTINGS,
-      ...legacy.nutritionSettings,
-      version: 1,
-      calories: { ...DEFAULT_NUTRITION_SETTINGS.calories, ...legacy.nutritionSettings?.calories },
-      protein: { ...DEFAULT_NUTRITION_SETTINGS.protein, ...legacy.nutritionSettings?.protein },
-      macros: { ...DEFAULT_NUTRITION_SETTINGS.macros, ...legacy.nutritionSettings?.macros },
-    },
-    nutritionDayRecords: legacy.nutritionDayRecords ?? [],
-    trainingPlanner: {
-      ...DEFAULT_TRAINING_PLANNER,
-      ...legacy.trainingPlanner,
-      version: 1,
-      dailyPlans: legacy.trainingPlanner?.dailyPlans ?? [],
-      recoveryHeuristics: { ...DEFAULT_TRAINING_PLANNER.recoveryHeuristics, ...legacy.trainingPlanner?.recoveryHeuristics },
-      weeklyTargets: { ...DEFAULT_TRAINING_PLANNER.weeklyTargets, ...legacy.trainingPlanner?.weeklyTargets },
-    },
-    cardioLog: legacy.cardioLog ?? [],
-    weeklyCardioTarget: legacy.weeklyCardioTarget ?? 105,
-    squatProgression: legacy.squatProgression ?? { currentLevel: 'assisted-squat', stableSessions: 0, updatedAt: new Date().toISOString() },
-    progressionPlans: legacy.progressionPlans ?? [],
-  };
-  const template = base.profile.trainingTemplate;
-  const program = base.program.map((day) => day.isRestDay ? { ...day, workoutId: undefined } : { ...day, workoutId: inferWorkoutId(day, template) });
-  const programByDay = new Map(program.map((day) => [day.id, day]));
-  const sessions = base.sessions.map((session) => {
-    const legacySession = session as WorkoutSession & { workoutId?: WorkoutId };
-    const workoutId = legacySession.workoutId
-      ?? inferWorkoutId({ id: legacySession.dayId, title: legacySession.title }, template)
-      ?? programByDay.get(legacySession.dayId)?.workoutId;
-    return { ...session, workoutId: workoutId ?? `legacy_${legacySession.dayId}` };
-  });
-  const migrated = { ...base, version: 9, program, sessions };
-  return { ...migrated, trainingPlanner: recalculateTrainingWeek(migrated) };
+export interface MigrationPreview {
+  local: DataSummary;
+  cloud: DataSummary | null;
+  duplicates: number;
+  conflicts: number;
 }
 
 function loadData(): AppData {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return migrateAppData(JSON.parse(saved) as AppData | LegacyAppData);
-  } catch {
-    // Fall through to safe seed data if storage is corrupted or unavailable.
-  }
-  return migrateAppData(createSeedData());
+  return repository?.loadLocal() ?? createInitialData();
 }
 
 export function useAppData() {
   const [data, setData] = useState<AppData>(loadData);
+  const bootstrapData = useRef(data);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('checking');
+  const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string | null>(null);
+  const [syncMessage, setSyncMessage] = useState('Checking secure cloud storage…');
+  const [account, setAccount] = useState<RemoteSnapshot['account'] | null>(null);
+  const [migrationBackupAvailable, setMigrationBackupAvailable] = useState(() => repository?.hasMigrationBackup() ?? false);
+  const [migrationRemote, setMigrationRemote] = useState<RemoteSnapshot | null | undefined>(undefined);
+  const revisionRef = useRef(0);
+  const lastSyncedFingerprint = useRef('');
+  const syncEnabled = useRef(false);
+  const syncInFlight = useRef(false);
+  const queuedData = useRef<AppData | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    repository?.saveLocal(data);
   }, [data]);
 
   const update = useCallback((recipe: (current: AppData) => AppData) => setData((current) => recipe(current)), []);
   const plannerDate = useRef(toDateKey());
+
+  const syncData = useCallback(async (nextData: AppData) => {
+    if (!repository || !syncEnabled.current) return;
+    if (syncInFlight.current) {
+      queuedData.current = nextData;
+      return;
+    }
+    syncInFlight.current = true;
+    let pending: AppData | null = nextData;
+    try {
+      while (pending) {
+        const candidate = pending;
+        pending = null;
+        queuedData.current = null;
+        const fingerprint = appDataFingerprint(candidate);
+        if (fingerprint === lastSyncedFingerprint.current) {
+          pending = queuedData.current;
+          continue;
+        }
+        setSyncStatus('syncing');
+        setSyncMessage('Saving changes securely…');
+        try {
+          const saved = await repository.saveRemote(candidate, revisionRef.current);
+          revisionRef.current = saved.revision;
+          lastSyncedFingerprint.current = appDataFingerprint(saved.data ?? candidate);
+          setAccount(saved.account);
+          setLastSuccessfulSync(saved.updatedAt);
+          setSyncStatus('synced');
+          setSyncMessage('All changes are synchronized.');
+        } catch (error) {
+          if (error instanceof RepositoryError && error.code === 'conflict' && error.remote?.data) {
+            const merged = mergeAppData(error.remote.data, candidate);
+            const saved = await repository.saveRemote(merged.data, error.remote.revision);
+            revisionRef.current = saved.revision;
+            lastSyncedFingerprint.current = appDataFingerprint(merged.data);
+            setData(merged.data);
+            setLastSuccessfulSync(saved.updatedAt);
+            setSyncStatus('conflict_resolved');
+            setSyncMessage(`Newer changes from another device were merged${merged.conflicts ? ` with ${merged.conflicts} flagged conflict${merged.conflicts === 1 ? '' : 's'}` : ''}.`);
+          } else if (error instanceof RepositoryError && error.code === 'auth_required') {
+            syncEnabled.current = false;
+            setSyncStatus('auth_required');
+            setSyncMessage('Sign in to protect and synchronize your health data.');
+          } else if (error instanceof RepositoryError && error.code === 'persistence_unavailable') {
+            setSyncStatus('unavailable');
+            setSyncMessage('Cloud storage is temporarily unavailable. Your recoverable local copy is safe.');
+          } else {
+            setSyncStatus('offline');
+            setSyncMessage('Changes are saved on this device and will retry when the connection returns.');
+          }
+        }
+        pending = queuedData.current;
+      }
+    } finally {
+      syncInFlight.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!repository) return;
+    let cancelled = false;
+    const bootstrap = async () => {
+      const localData = bootstrapData.current;
+      setSyncStatus('checking');
+      try {
+        const remote = await repository.loadRemote();
+        if (cancelled) return;
+        setAccount(remote.account);
+        revisionRef.current = remote.revision;
+        setLastSuccessfulSync(remote.updatedAt);
+        const localHasData = hasMeaningfulData(localData);
+        const same = Boolean(remote.data && appDataFingerprint(remote.data) === appDataFingerprint(stripProductionFixtures(localData)));
+        if (same) {
+          repository.markMigrationVerified();
+          syncEnabled.current = true;
+          lastSyncedFingerprint.current = appDataFingerprint(remote.data!);
+          setData(remote.data!);
+          setSyncStatus('synced');
+          setSyncMessage('All changes are synchronized.');
+          return;
+        }
+        if (localHasData && !repository.migrationVerified()) {
+          setMigrationRemote(remote);
+          setSyncStatus('migration_required');
+          setSyncMessage('Existing browser data is ready to import into your account.');
+          return;
+        }
+        if (remote.data && !localHasData) {
+          syncEnabled.current = true;
+          lastSyncedFingerprint.current = appDataFingerprint(remote.data);
+          setData(remote.data);
+          setSyncStatus('synced');
+          setSyncMessage('Your synchronized data is available on this device.');
+          return;
+        }
+        if (remote.data && localHasData) {
+          const merged = mergeAppData(remote.data, stripProductionFixtures(localData));
+          syncEnabled.current = true;
+          setData(merged.data);
+          void syncData(merged.data);
+          return;
+        }
+        syncEnabled.current = true;
+        void syncData(stripProductionFixtures(localData));
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof RepositoryError && error.code === 'auth_required') {
+          setSyncStatus('auth_required');
+          setSyncMessage('Sign in to protect and synchronize your health data.');
+        } else if (error instanceof RepositoryError && error.code === 'persistence_unavailable') {
+          setSyncStatus('unavailable');
+          setSyncMessage('Cloud storage is not connected yet. Your local copy remains available.');
+        } else {
+          setSyncStatus('offline');
+          setSyncMessage('You appear to be offline. Changes remain safe on this device until sync resumes.');
+        }
+      }
+    };
+    void bootstrap();
+    return () => { cancelled = true; };
+  }, [syncData]);
+
+  useEffect(() => {
+    if (!syncEnabled.current || migrationRemote !== undefined) return;
+    if (appDataFingerprint(data) === lastSyncedFingerprint.current) return;
+    const timer = window.setTimeout(() => { void syncData(data); }, 700);
+    return () => window.clearTimeout(timer);
+  }, [data, migrationRemote, syncData]);
+
+  useEffect(() => {
+    const retry = () => { if (syncEnabled.current) void syncData(data); };
+    window.addEventListener('online', retry);
+    return () => window.removeEventListener('online', retry);
+  }, [data, syncData]);
+
+  const migrationPreview = useMemo<MigrationPreview | null>(() => {
+    if (migrationRemote === undefined) return null;
+    const cleaned = stripProductionFixtures(data);
+    const merged = migrationRemote?.data ? mergeAppData(migrationRemote.data, cleaned) : { data: cleaned, duplicates: 0, conflicts: 0 };
+    return {
+      local: summarizeAppData(cleaned),
+      cloud: migrationRemote?.data ? summarizeAppData(migrationRemote.data) : null,
+      duplicates: merged.duplicates,
+      conflicts: merged.conflicts,
+    };
+  }, [data, migrationRemote]);
+
+  const migrateLocalData = useCallback(async () => {
+    if (!repository || migrationRemote === undefined) return false;
+    const cleaned = stripProductionFixtures(data);
+    const merged = migrationRemote?.data ? mergeAppData(migrationRemote.data, cleaned) : { data: cleaned, duplicates: 0, conflicts: 0 };
+    repository.keepMigrationBackup(data);
+    setMigrationBackupAvailable(true);
+    setSyncStatus('syncing');
+    setSyncMessage('Importing existing records into your account…');
+    try {
+      const saved = await repository.saveRemote(merged.data, migrationRemote?.revision ?? 0);
+      repository.markMigrationVerified();
+      repository.saveLocal(merged.data);
+      revisionRef.current = saved.revision;
+      lastSyncedFingerprint.current = appDataFingerprint(merged.data);
+      syncEnabled.current = true;
+      setAccount(saved.account);
+      setLastSuccessfulSync(saved.updatedAt);
+      setData(merged.data);
+      setMigrationRemote(undefined);
+      setSyncStatus('synced');
+      setSyncMessage('Existing records were imported and verified. A recoverable local copy was kept.');
+      return true;
+    } catch (error) {
+      setSyncStatus(error instanceof RepositoryError && error.code === 'offline' ? 'offline' : 'unavailable');
+      setSyncMessage('The import did not complete. Nothing was removed and your local data is still safe.');
+      return false;
+    }
+  }, [data, migrationRemote]);
+
+  const keepLocalOnly = useCallback(() => {
+    syncEnabled.current = false;
+    setMigrationRemote(undefined);
+    setSyncStatus('local_only');
+    setSyncMessage('Cloud import was postponed. This device copy remains available.');
+  }, []);
+
+  const retrySync = useCallback(async () => {
+    if (!repository) return;
+    try {
+      const remote = await repository.loadRemote();
+      setAccount(remote.account);
+      revisionRef.current = remote.revision;
+      if (hasMeaningfulData(data) && !repository.migrationVerified()) {
+        setMigrationRemote(remote);
+        setSyncStatus('migration_required');
+        return;
+      }
+      syncEnabled.current = true;
+      const merged = remote.data ? mergeAppData(remote.data, data).data : data;
+      setData(merged);
+      await syncData(merged);
+    } catch (error) {
+      setSyncStatus(error instanceof RepositoryError && error.code === 'auth_required' ? 'auth_required' : 'offline');
+    }
+  }, [data, syncData]);
+
+  const exportBackup = useCallback((): Project75Backup => createBackup(data), [data]);
+  const previewBackup = useCallback((raw: string): BackupPreview => inspectBackup(raw, data), [data]);
+  const importBackup = useCallback((backup: Project75Backup) => {
+    const imported = backupToAppData(backup);
+    const merged = mergeAppData(data, imported);
+    setData(merged.data);
+    return merged;
+  }, [data]);
+  const removeLocalMigrationBackup = useCallback(() => {
+    repository?.removeMigrationBackup();
+    setMigrationBackupAvailable(false);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -286,23 +363,11 @@ export function useAppData() {
     return { ...current, measurements: withDetectedOutliers(measurements) };
   }), [update]);
 
-  const saveBodyMeasurement = useCallback((draft: BodyMeasurementDraft, replaceId?: string) => update((current) => {
-    const id = replaceId ?? uid('measurement');
-    const measurement: BodyMeasurement = { ...draft, id, createdAt: new Date().toISOString() };
-    const genuine = current.measurements.filter((item) => !item.isDemo);
-    const measurements = replaceId
-      ? genuine.map((item) => item.id === replaceId ? measurement : item)
-      : [...genuine, measurement];
-    return {
-      ...current,
-      measurements: withDetectedOutliers(measurements),
-      bodyGoals: {
-        ...current.bodyGoals,
-        fatFreeMassTargetKg: current.bodyGoals.fatFreeMassTargetKg ?? draft.fatFreeMassKg,
-        muscleMassTargetKg: current.bodyGoals.muscleMassTargetKg ?? draft.muscleMassKg,
-      },
-    };
-  }), [update]);
+  const saveBodyMeasurement = useCallback((draft: BodyMeasurementDraft, replaceId?: string) => update((current) => applyBodyMeasurement(current, draft, {
+    id: uid('measurement'),
+    now: new Date().toISOString(),
+    replaceId,
+  })), [update]);
 
   const updateBodyGoals = useCallback((bodyGoals: BodyGoalSettings) => update((current) => ({ ...current, bodyGoals })), [update]);
 
@@ -475,25 +540,15 @@ export function useAppData() {
     return { ...current, habits };
   }), [update]);
 
-  const resetDemo = useCallback(() => {
-    const seed = migrateAppData(createSeedData());
-    setData(seed);
-    return seed;
-  }, []);
-
-  const totalsForDate = useCallback((date: string) => {
-    const macros = data.foodLog.filter((entry) => entry.date === date).flatMap((entry) => {
-      const food = foodMap.get(entry.foodId);
-      return food ? [entryMacros(food, entry)] : [];
-    });
-    return addMacros(macros);
-  }, [data.foodLog]);
+  const totalsForDate = useCallback((date: string) => getNutritionTotals(data, date), [data]);
 
   return useMemo(() => ({
     data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings,
     saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
-    startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate,
-  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings, saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
+    startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, totalsForDate,
+    syncStatus, syncMessage, lastSuccessfulSync, account, migrationPreview, migrationBackupAvailable,
+    migrateLocalData, keepLocalOnly, retrySync, exportBackup, previewBackup, importBackup, removeLocalMigrationBackup,
+  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings, saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, totalsForDate, syncStatus, syncMessage, lastSuccessfulSync, account, migrationPreview, migrationBackupAvailable, migrateLocalData, keepLocalOnly, retrySync, exportBackup, previewBackup, importBackup, removeLocalMigrationBackup]);
 }
 
 export type AppController = ReturnType<typeof useAppData>;

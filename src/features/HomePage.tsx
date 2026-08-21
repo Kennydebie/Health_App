@@ -6,12 +6,13 @@ import { MacroMeter, ToneIcon, WeekStrip, type WeekStripItem } from '../componen
 import type { Page } from '../components/AppShell';
 import { exerciseMap } from '../data/exercises';
 import { prettyDate, toDateKey } from '../lib/date';
-import { activePlanWeek, dailyScore, displayWorkoutTitle, getWeekSnapshot, weeklyConsistency } from '../lib/engagement';
+import { displayWorkoutTitle } from '../lib/engagement';
 import { weightTrend } from '../lib/progress';
 import { rollingWeightSeries, weightHistory } from '../lib/bodyMeasurements';
 import { plannerWarnings } from '../lib/adaptivePlanner';
 import type { AppController } from '../state/useAppData';
 import type { SessionTemplateId } from '../types/models';
+import { getDashboardSummary } from '../lib/selectors';
 
 interface HomePageProps { controller: AppController; setPage: (page: Page) => void; onStartWorkout: (templateId: SessionTemplateId, date?: string) => void; }
 
@@ -23,14 +24,15 @@ function weightSummary(measurementCount: number, currentAverage: number, previou
 }
 
 export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps) {
-  const { data, totalsForDate } = controller;
+  const { data } = controller;
   const today = toDateKey();
-  const totals = totalsForDate(today);
+  const dashboard = useMemo(() => getDashboardSummary(data, today), [data, today]);
+  const totals = dashboard.totals;
   const profile = data.profile;
   const trend = weightTrend(data.measurements);
   const todayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()).toLowerCase();
   const activeSession = [...data.sessions].reverse().find((session) => !session.completedAt);
-  const weekSnapshot = getWeekSnapshot(data, today);
+  const weekSnapshot = dashboard.training;
   const todayPlan = weekSnapshot.days.find((item) => item.date === today);
   const workoutDay = todayPlan?.day ?? data.program.find((day) => day.id === todayName) ?? data.program[0];
   const selectedTemplateId = todayPlan?.plan?.selectedSessionTemplateId ?? workoutDay.workoutId ?? 'cardio_recovery';
@@ -41,9 +43,9 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
   const coach = weightSummary(weightMeasurementCount, trend.currentAverage, trend.previousAverage, trend.weeklyChange);
   const caloriesRemaining = profile.calorieTarget - totals.calories;
   const proteinRemaining = profile.proteinTarget - totals.protein;
-  const consistency = weeklyConsistency(data, today);
-  const week = activePlanWeek(data.measurements, today);
-  const score = dailyScore(data, today, totals);
+  const consistency = dashboard.weekly;
+  const week = dashboard.planWeek;
+  const score = dashboard.daily;
 
   const weekItems: WeekStripItem[] = weekSnapshot.days.map((item) => {
     const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date(`${item.date}T12:00:00`)).toLowerCase();
@@ -87,9 +89,9 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
         <button className="primary-button command-action" type="button" onClick={action.run}><ActionIcon size={19} /> {action.label}<ArrowRight size={18} /></button>
       </div>
       <div className="daily-score">
-        <ProgressRing value={score.total} max={100} size={188} valueLabel={`${score.total}%`} label="daily actions complete" tone="coral" />
-        <p><strong>{consistency.percent}% consistency to date</strong><span>{consistency.strength} of {consistency.plannedStrength} strength sessions complete</span></p>
-        <details className="score-explanation"><summary>How this score works</summary><div>{score.items.map((item) => <span key={item.id}><b>{item.label}</b><small>{item.points} / {item.max} pts</small></span>)}</div><p>Future sessions are never counted as missed.</p></details>
+        <ProgressRing value={score.completed} max={Math.max(1, score.due)} size={188} valueLabel={`${score.completed}/${score.due}`} label="daily goals completed" tone="coral" />
+        <p><strong>{score.status === 'in_progress' ? 'Today is in progress' : 'Today is finished'}</strong><span>{consistency.completed} of {consistency.due} due weekly goals completed</span></p>
+        <details className="score-explanation"><summary>Daily goal checklist</summary><div>{score.goals.map((item) => <span key={item.id}><b>{item.label}</b><small>{!item.due ? 'Not due' : item.complete ? 'Done' : item.detail}</small></span>)}</div><p>The percentage is completed goals divided by visible due goals. Future goals are excluded.</p></details>
       </div>
     </section>
 
@@ -106,7 +108,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
     </section>
 
     <section className="week-card card">
-      <div className="section-title"><div><h2>This week</h2></div><span>{consistency.percent}% complete</span></div>
+      <div className="section-title"><div><h2>This week</h2></div><span>{consistency.percent}% · {consistency.completed} of {consistency.due} due goals</span></div>
       <WeekStrip items={weekItems} />
       <div className="week-legend"><span><i className="strength" /> Strength</span><span><i className="cardio" /> Cardio</span><span><i className="nutrition" /> Nutrition</span><span><i className="recovery" /> Recovery</span></div>
     </section>
