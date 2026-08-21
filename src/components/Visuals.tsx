@@ -39,27 +39,6 @@ export function WeekStrip({ items }: { items: WeekStripItem[] }) {
   </div>;
 }
 
-function muscleRegion(muscles: string[]) {
-  const normalized = muscles.join(' ').toLowerCase();
-  if (/chest|pec/.test(normalized)) return 'chest';
-  if (/lat|back|rear delt/.test(normalized)) return 'back';
-  if (/quad|glute|hamstring|calf|adductor/.test(normalized)) return 'lower';
-  if (/shoulder|delt|triceps|biceps/.test(normalized)) return 'upper';
-  if (/core|ab/.test(normalized)) return 'core';
-  return 'full';
-}
-
-export function BodyFocus({ muscles, compact = false }: { muscles: string[]; compact?: boolean }) {
-  const region = muscleRegion(muscles);
-  return <div className={`body-focus region-${region} ${compact ? 'compact' : ''}`} role="img" aria-label={`Stylized body focus: ${muscles.join(', ')}`}>
-    <span className="body-focus__head" />
-    <span className="body-focus__torso" />
-    <span className="body-focus__arm left" /><span className="body-focus__arm right" />
-    <span className="body-focus__leg left" /><span className="body-focus__leg right" />
-    <i className="body-focus__highlight" />
-  </div>;
-}
-
 export function PageSkeleton() {
   return <div className="page page-skeleton" aria-label="Loading page"><div className="skeleton-line wide" /><div className="skeleton-line" /><div className="skeleton-grid"><span /><span /><span /></div></div>;
 }

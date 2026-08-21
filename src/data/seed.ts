@@ -89,6 +89,7 @@ export function createSeedData(): AppData {
     ] }],
     measurements: structuredClone(measurements),
     bodyGoals: structuredClone(DEFAULT_BODY_GOALS),
+    weightLossPlans: [],
     program: structuredClone(defaultProgram),
     trainingPlanner: structuredClone(DEFAULT_TRAINING_PLANNER),
     sessions: structuredClone(demoSessions),

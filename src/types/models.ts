@@ -133,11 +133,64 @@ export interface BodyGoalSettings {
   waistTargetCm: number | null;
 }
 
+export interface WeightLossPlan {
+  id: string;
+  baselineMeasurementId: string;
+  baselineWeightKg: number;
+  baselineBodyFatPercent: number | null;
+  baselineFatMassKg: number | null;
+  baselineFatFreeMassKg: number | null;
+  baselineMuscleMassKg: number | null;
+  goalWeightKg: number;
+  weeklyRatePct: number;
+  planStartDate: string;
+  estimatedTargetDate: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MuscleId =
+  | 'upper_chest'
+  | 'mid_chest'
+  | 'lower_chest'
+  | 'front_deltoid'
+  | 'side_deltoid'
+  | 'rear_deltoid'
+  | 'biceps'
+  | 'triceps'
+  | 'forearms'
+  | 'upper_trapezius'
+  | 'middle_trapezius'
+  | 'rhomboids'
+  | 'latissimus_dorsi'
+  | 'spinal_erectors'
+  | 'rectus_abdominis'
+  | 'obliques'
+  | 'quadriceps'
+  | 'hamstrings'
+  | 'gluteus_maximus'
+  | 'gluteus_medius'
+  | 'adductors'
+  | 'hip_flexors'
+  | 'calves'
+  | 'tibialis_anterior';
+
+export interface ExerciseMuscleMap {
+  primary: MuscleId[];
+  secondary: MuscleId[];
+  stabilizers?: MuscleId[];
+  preferredView: 'front' | 'back' | 'both';
+  laterality?: 'bilateral' | 'left' | 'right' | 'alternating';
+  presentation?: 'exercise-role' | 'session-exposure';
+}
+
 export interface Exercise {
   id: string;
   name: string;
   primaryMuscles: string[];
   secondaryMuscles: string[];
+  muscleMap: ExerciseMuscleMap;
   movementPatterns: MovementPattern[];
   requiredEquipment: string[];
   defaultPrescription: ExercisePrescription;
@@ -293,6 +346,7 @@ export interface AppData {
   savedMeals: SavedMeal[];
   measurements: BodyMeasurement[];
   bodyGoals: BodyGoalSettings;
+  weightLossPlans: WeightLossPlan[];
   program: WorkoutDay[];
   trainingPlanner: TrainingPlannerState;
   sessions: WorkoutSession[];

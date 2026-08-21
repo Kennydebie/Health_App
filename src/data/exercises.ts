@@ -1,13 +1,19 @@
 import type { Exercise, WorkoutDay } from '../types/models';
+import { EXERCISE_MUSCLE_MAPS } from '../lib/muscles';
 
-type ExerciseInput = Omit<Exercise, 'balanceRequirement' | 'experienceLevel' | 'videoFallback'> & Partial<Pick<Exercise, 'balanceRequirement' | 'experienceLevel' | 'videoFallback'>>;
+type ExerciseInput = Omit<Exercise, 'balanceRequirement' | 'experienceLevel' | 'videoFallback' | 'muscleMap'> & Partial<Pick<Exercise, 'balanceRequirement' | 'experienceLevel' | 'videoFallback'>>;
 
-const defineExercise = (input: ExerciseInput): Exercise => ({
-  balanceRequirement: 'none',
-  experienceLevel: 'beginner',
-  videoFallback: 'Use the written setup and execution cues. If the movement still feels unclear, ask a qualified coach or physiotherapist to watch your technique before adding load.',
-  ...input,
-});
+const defineExercise = (input: ExerciseInput): Exercise => {
+  const muscleMap = EXERCISE_MUSCLE_MAPS[input.id];
+  if (!muscleMap) throw new Error(`Missing anatomical muscle map for ${input.id}`);
+  return {
+    balanceRequirement: 'none',
+    experienceLevel: 'beginner',
+    videoFallback: 'Use the written setup and execution cues. If the movement still feels unclear, ask a qualified coach or physiotherapist to watch your technique before adding load.',
+    ...input,
+    muscleMap,
+  };
+};
 
 export const exercises: Exercise[] = [
   defineExercise({ id: 'bench-press', name: 'Barbell Bench Press', primaryMuscles: ['Chest', 'Triceps'], secondaryMuscles: ['Anterior delts'], movementPatterns: ['Horizontal push'], requiredEquipment: ['Barbell', 'Bench'], defaultPrescription: { sets: 3, repMin: 6, repMax: 10, restSeconds: 180, rir: '2', warmupSets: 3 }, setup: ['Set the rack so the bar is reachable without protracting your shoulders.', 'Plant both feet firmly and pull your shoulder blades down and back.', 'Use a grip that keeps forearms close to vertical at the bottom.'], execution: ['Unrack over your shoulders.', 'Lower the bar under control to the lower or mid chest.', 'Press up and slightly back while keeping your upper back fixed.'], breathing: 'Take a deep breath and brace before lowering; exhale after passing the hardest part of the press.', mistakes: ['Elbows flared to 90°', 'Shoulders rolling forward', 'Bouncing the bar', 'Losing foot pressure', 'Wrists folded back'], safety: 'Use safeties or a spotter. Stop the set if shoulder position becomes painful or unstable.', alternatives: ['Dumbbell bench press', 'Floor press', 'Push-up'], videoId: 'lWFknlOTbyM' }),

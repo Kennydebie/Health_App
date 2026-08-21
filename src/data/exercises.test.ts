@@ -34,5 +34,6 @@ describe('revised weekly training schedule', () => {
     expect(exercises.every((exercise) => exercise.movementPatterns && exercise.requiredEquipment.length && exercise.defaultPrescription.sets > 0)).toBe(true);
     expect(exercises.every((exercise) => exercise.videoId === undefined || /^[\w-]{11}$/.test(exercise.videoId))).toBe(true);
     expect(exercises.every((exercise) => exercise.videoFallback.length > 30 && exercise.setup.length && exercise.execution.length && exercise.safety.length)).toBe(true);
+    expect(exercises.every((exercise) => exercise.muscleMap.primary.length > 0 && exercise.muscleMap.preferredView)).toBe(true);
   });
 });

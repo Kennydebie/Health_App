@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Area, AreaChart, CartesianGrid, Line, LineChart, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, ResponsiveContainer } from 'recharts';
 import { Activity, AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, Check, Droplets, Gauge, Info, Scale, ShieldCheck, Target, TrendingDown } from 'lucide-react';
 import {
   BMI_REFERENCE,
@@ -11,21 +11,17 @@ import {
   latestBodyComposition,
   metricChange,
   metricSeries,
-  projectedBodyFatAtWeight,
   sortedMeasurements,
   targetWeightAtBodyFat,
 } from '../lib/bodyMeasurements';
 import type { AppController } from '../state/useAppData';
 import type { BodyGoalSettings, BodyMeasurement, BodyMetricKey } from '../types/models';
+import { WeightProgressPlan } from './WeightProgressPlan';
 
 interface Props { controller: AppController; }
-type ChartRange = '4w' | '3m' | '6m' | '1y' | 'all';
 
-const CHART_METRICS: BodyMetricKey[] = ['weightKg', 'bodyFatPercent', 'fatMassKg', 'fatFreeMassKg', 'muscleMassKg', 'skeletalMusclePercent', 'bodyWaterPercent', 'visceralFatIndex', 'waistCircumferenceCm'];
 const PRIMARY_METRICS: BodyMetricKey[] = ['weightKg', 'bodyFatPercent', 'fatMassKg', 'fatFreeMassKg', 'muscleMassKg', 'visceralFatIndex'];
 const SECONDARY_METRICS: BodyMetricKey[] = ['bmi', 'musclePercent', 'skeletalMusclePercent', 'bodyWaterPercent', 'subcutaneousFatPercent', 'boneMassKg', 'proteinPercent', 'bmrKcal', 'bodyAge'];
-const TOOLTIP_STYLE = { background: '#101a20', border: '1px solid rgba(116, 140, 151, .28)', borderRadius: 12, color: '#f6f2ed' };
-const RANGE_DAYS: Record<ChartRange, number | null> = { '4w': 28, '3m': 90, '6m': 183, '1y': 365, all: null };
 
 function round(value: number | null, digits = 1) {
   return value == null ? '—' : value.toFixed(digits);
@@ -60,8 +56,6 @@ function targetLabel(metric: BodyMetricKey, goals: BodyGoalSettings, goalWeightK
 
 export function BodyCompositionDashboard({ controller }: Props) {
   const { data, updateBodyGoals, confirmMeasurementMetric } = controller;
-  const [metric, setMetric] = useState<BodyMetricKey>('weightKg');
-  const [range, setRange] = useState<ChartRange>('3m');
   const [goalDraft, setGoalDraft] = useState(data.bodyGoals);
   const measurements = useMemo(() => sortedMeasurements(data.measurements), [data.measurements]);
   const composition = measurements.filter(hasBodyComposition);
@@ -69,28 +63,6 @@ export function BodyCompositionDashboard({ controller }: Props) {
   const baseline = composition[0];
   const previous = composition.length > 1 ? composition.at(-2) : undefined;
   const bodyFatReference = bodyFatReferenceRange(data.profile.age, data.profile.sex);
-  const bodyFatTargetWeight = latest?.fatFreeMassKg == null ? null : targetWeightAtBodyFat(latest.fatFreeMassKg, data.bodyGoals.bodyFatTargetMaxPercent);
-  const personalTargetWeight = latest?.fatFreeMassKg == null ? null : targetWeightAtBodyFat(latest.fatFreeMassKg, data.bodyGoals.bodyFatPersonalTargetPercent);
-  const goalBodyFat = latest?.fatFreeMassKg == null ? null : projectedBodyFatAtWeight(latest.fatFreeMassKg, data.profile.goalWeightKg);
-
-  const chartData = useMemo(() => {
-    const series = metricSeries(data.measurements, metric, true);
-    const days = RANGE_DAYS[range];
-    const cutoff = days && series.length ? new Date(series.at(-1)!.measuredAt).getTime() - days * 86_400_000 : 0;
-    return series.filter((point) => !days || new Date(point.measuredAt).getTime() >= cutoff).map((point) => ({
-      ...point,
-      label: new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(point.measuredAt)),
-      trend: point.excluded ? null : point.value,
-    }));
-  }, [data.measurements, metric, range]);
-
-  const selectedGoal = metric === 'weightKg' ? data.profile.goalWeightKg
-    : metric === 'bodyFatPercent' ? data.bodyGoals.bodyFatPersonalTargetPercent
-      : metric === 'fatFreeMassKg' ? data.bodyGoals.fatFreeMassTargetKg
-        : metric === 'muscleMassKg' ? data.bodyGoals.muscleMassTargetKg
-          : metric === 'waistCircumferenceCm' ? data.bodyGoals.waistTargetCm : null;
-  const selectedBand = metric === 'bodyFatPercent' ? [data.bodyGoals.bodyFatTargetMinPercent, data.bodyGoals.bodyFatTargetMaxPercent] : null;
-
   const fatQuality = (() => {
     if (!baseline || !latest || baseline.id === latest.id || baseline.weightKg == null || latest.weightKg == null || baseline.fatMassKg == null || latest.fatMassKg == null || baseline.fatFreeMassKg == null || latest.fatFreeMassKg == null) return null;
     const weight = latest.weightKg - baseline.weightKg;
@@ -101,12 +73,14 @@ export function BodyCompositionDashboard({ controller }: Props) {
   })();
 
   return <div className="body-dashboard">
-    {!latest ? <section className="card body-empty"><Scale size={32} /><h2>Body measurements</h2><div className="empty-state compact"><h3>No body measurements yet</h3><p>Upload a FitDays screenshot or enter your weight to start tracking progress.</p></div></section> : <>
+    {!latest ? <><section className="card body-empty"><Scale size={32} /><h2>Body composition</h2><div className="empty-state compact"><h3>No body-composition reading yet</h3><p>Upload a FitDays screenshot to add body-fat and muscle estimates.</p></div></section><WeightProgressPlan controller={controller} /></> : <>
       <section className="card body-summary">
         <div className="body-summary__lead"><p className="eyebrow">Latest body composition · {formatMeasurementDate(latest.measuredAt, false)}</p><h2>{round(latest.weightKg)} <small>kg</small></h2><span>{round(latest.bodyFatPercent)}% body fat · {round(latest.fatMassKg)} kg fat mass</span></div>
         <div className="body-summary__metrics"><span><small>Fat-free mass</small><strong>{round(latest.fatFreeMassKg)} kg</strong></span><span><small>Muscle mass</small><strong>{round(latest.muscleMassKg)} kg</strong></span><span><small>Body water</small><strong>{round(latest.bodyWaterPercent)}%</strong></span><span><small>Measurements</small><strong>{composition.length}</strong></span></div>
         <div className="body-summary__quality"><ShieldCheck size={18} /><p><strong>{composition.length === 1 ? 'One measurement' : 'Comparison available'}</strong>{composition.length === 1 ? 'Add another measurement under similar conditions to compare changes.' : `Weight change since the previous measurement: ${changeLabel(latest.weightKg != null && previous?.weightKg != null ? latest.weightKg - previous.weightKg : null, 'kg')}. Consumer scale composition values are estimates; compare readings taken under similar conditions.`}</p></div>
       </section>
+
+      <WeightProgressPlan controller={controller} />
 
       <section className="body-kpi-grid" aria-label="Primary body composition KPIs">
         {PRIMARY_METRICS.map((item) => {
@@ -129,22 +103,6 @@ export function BodyCompositionDashboard({ controller }: Props) {
             <footer>Measured {formatMeasurementDate(latest.measuredAt, false)}</footer>
           </article>;
         })}
-      </section>
-
-      <section className="card body-projection">
-        <div><h2>Target projection</h2><p>Estimated from the latest fat-free-mass reading while holding lean mass constant. This is not a prediction.</p></div>
-        <div className="projection-path">
-          <span><small>Now</small><strong>{round(latest.weightKg)} kg</strong><em>{round(latest.bodyFatPercent)}% fat</em></span><ArrowRight size={20}/>
-          <span><small>{data.bodyGoals.bodyFatTargetMaxPercent}% checkpoint</small><strong>{round(bodyFatTargetWeight)} kg</strong><em>estimated</em></span><ArrowRight size={20}/>
-          <span><small>{data.bodyGoals.bodyFatPersonalTargetPercent}% target</small><strong>{round(personalTargetWeight)} kg</strong><em>estimated</em></span><ArrowRight size={20}/>
-          <span className="goal"><small>Project 75</small><strong>{data.profile.goalWeightKg} kg</strong><em>{goalBodyFat == null ? '—' : `≈ ${goalBodyFat}% fat`}</em></span>
-        </div>
-      </section>
-
-      <section className="card body-trend-card">
-        <div className="section-title body-chart-controls"><div><h2>{BODY_METRIC_LABELS[metric]} trend</h2></div><div><select aria-label="Body metric" value={metric} onChange={(event) => setMetric(event.target.value as BodyMetricKey)}>{CHART_METRICS.map((item) => <option key={item} value={item}>{BODY_METRIC_LABELS[item]}</option>)}</select><div className="range-toggle">{(['4w', '3m', '6m', '1y', 'all'] as const).map((item) => <button type="button" className={range === item ? 'active' : ''} onClick={() => setRange(item)} key={item}>{item === 'all' ? 'All' : item}</button>)}</div></div></div>
-        {chartData.length ? <div className="body-chart"><ResponsiveContainer width="100%" height="100%"><LineChart data={chartData} margin={{ top: 18, right: 24, left: 4, bottom: 8 }}><CartesianGrid stroke="rgba(139,161,171,.13)" vertical={false}/><XAxis dataKey="label" stroke="#778991" tickLine={false} axisLine={false}/><YAxis domain={['dataMin - 1', 'dataMax + 1']} stroke="#778991" tickLine={false} axisLine={false} width={52}/><Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value) => [`${Number(value).toFixed(1)} ${BODY_METRIC_UNITS[metric]}`, BODY_METRIC_LABELS[metric]]} labelFormatter={(_, payload) => payload?.[0]?.payload?.measuredAt ? formatMeasurementDate(payload[0].payload.measuredAt) : ''}/>{selectedBand ? <ReferenceArea y1={selectedBand[0]} y2={selectedBand[1]} fill="#67cbb2" fillOpacity={.09}/>: null}{selectedGoal != null ? <ReferenceLine y={selectedGoal} stroke="#efb44c" strokeDasharray="6 5" label={{ value: 'Personal target', fill: '#efb44c', position: 'insideTopRight' }}/>: null}<Line type="monotone" connectNulls={false} dataKey="trend" name={BODY_METRIC_LABELS[metric]} stroke="#63b3ed" strokeWidth={3} dot={{ r: 4, fill: '#101a20', strokeWidth: 2 }} activeDot={{ r: 6 }}/></LineChart></ResponsiveContainer></div> : <div className="empty-state compact"><Activity size={28}/><h3>No readings in this range</h3><p>Choose All or add another measurement.</p></div>}
-        <div className="chart-legend"><span><i className="solid"/> Actual saved points</span><span><i className="target"/> Personal target</span><span>Flagged outliers remain in history but are omitted from the connected trend.</span></div>
       </section>
 
       <section className="body-detail-grid">

@@ -8,7 +8,8 @@ import { buildProgramTemplate } from '../lib/workout';
 import { DEFAULT_BODY_GOALS, withDetectedOutliers } from '../lib/bodyMeasurements';
 import { DEFAULT_TRAINING_PLANNER, dayIdForDate, moveTrainingSession as movePlannerSession, recalculateTrainingWeek, restoreRecommendedWeek as restorePlannerWeek, selectTrainingSession as selectPlannerSession, workoutTemplate } from '../lib/adaptivePlanner';
 import { toDateKey } from '../lib/date';
-import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementConfidence, BodyMeasurementDraft, BodyMetricKey, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, ProgressionPlan, ReadinessResponse, SessionTemplateId, SquatProgressionLevel, TrainingDayPlan, TrainingPlannerState, TrainingSelectionSource, TrainingTemplate, UserProfile, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
+import { createWeightLossPlan } from '../lib/weightLossPlan';
+import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementConfidence, BodyMeasurementDraft, BodyMetricKey, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, ProgressionPlan, ReadinessResponse, SessionTemplateId, SquatProgressionLevel, TrainingDayPlan, TrainingPlannerState, TrainingSelectionSource, TrainingTemplate, UserProfile, WeightLossPlan, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 const STORAGE_KEY = 'cut-forward-data-v1';
 
@@ -52,12 +53,13 @@ type LegacyMeasurement = Partial<BodyMeasurement> & {
   confidence?: BodyMeasurementConfidence & { timestamp?: number | null };
 };
 
-type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals' | 'trainingPlanner'> & {
+type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals' | 'weightLossPlans' | 'trainingPlanner'> & {
   profile: UserProfile & { startWeightKg?: number; currentWeightKg?: number };
   measurements?: LegacyMeasurement[];
   bodyMeasurements?: LegacyMeasurement[];
   weights?: LegacyWeightEntry[];
   bodyGoals?: Partial<BodyGoalSettings>;
+  weightLossPlans?: WeightLossPlan[];
   trainingPlanner?: Partial<TrainingPlannerState>;
 };
 
@@ -124,6 +126,7 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
     program: needsProgramUpgrade ? structuredClone(defaultProgram) : legacy.program,
     measurements,
     bodyGoals: { ...DEFAULT_BODY_GOALS, ...legacy.bodyGoals, version: 1 },
+    weightLossPlans: legacy.weightLossPlans ?? [],
     trainingPlanner: {
       ...DEFAULT_TRAINING_PLANNER,
       ...legacy.trainingPlanner,
@@ -256,6 +259,22 @@ export function useAppData() {
   }), [update]);
 
   const updateBodyGoals = useCallback((bodyGoals: BodyGoalSettings) => update((current) => ({ ...current, bodyGoals })), [update]);
+
+  const saveWeightLossPlan = useCallback((baselineMeasurementId: string, weeklyRatePct: number, planStartDate: string) => update((current) => {
+    const baseline = current.measurements.find((measurement) => measurement.id === baselineMeasurementId && !measurement.isDemo && measurement.weightKg != null);
+    if (!baseline) return current;
+    const now = new Date().toISOString();
+    const nextPlan = createWeightLossPlan({
+      id: uid('weight_plan'),
+      measurement: baseline,
+      goalWeightKg: current.profile.goalWeightKg,
+      weeklyRatePct,
+      planStartDate,
+      version: Math.max(0, ...current.weightLossPlans.map((plan) => plan.version)) + 1,
+      now,
+    });
+    return { ...current, weightLossPlans: [...current.weightLossPlans, nextPlan] };
+  }), [update]);
 
   const confirmMeasurementMetric = useCallback((measurementId: string, metric: BodyMetricKey) => update((current) => ({
     ...current,
@@ -414,9 +433,9 @@ export function useAppData() {
 
   return useMemo(() => ({
     data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal,
-    saveWeight, saveBodyMeasurement, updateBodyGoals, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
+    saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
     startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate,
-  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveWeight, saveBodyMeasurement, updateBodyGoals, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
+  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
 }
 
 export type AppController = ReturnType<typeof useAppData>;
