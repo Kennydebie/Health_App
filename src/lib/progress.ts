@@ -21,7 +21,7 @@ export function weightTrend(weights: WeightEntry[]) {
 }
 
 export function workoutVolume(session: WorkoutSession): number {
-  return session.sets.filter((set) => set.completed).reduce((sum, set) => sum + set.weightKg * set.reps, 0);
+  return session.sets.filter((set) => set.completed && !set.isWarmup).reduce((sum, set) => sum + set.weightKg * set.reps, 0);
 }
 
 export function formatDuration(seconds: number): string {

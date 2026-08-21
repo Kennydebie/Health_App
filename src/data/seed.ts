@@ -27,7 +27,7 @@ const weightValues = [83.8, 83.6, 83.7, 83.3, 83.4, 83.2, 83.0, 83.1, 82.9, 82.8
 const weights: WeightEntry[] = weightValues.map((weightKg, index) => ({ id: `demo_weight_${index}`, date: shiftDate(today, index - 13), weightKg }));
 
 const demoSessions: WorkoutSession[] = [
-  { id: 'demo_session_1', date: shiftDate(today, -7), dayId: 'monday', title: 'Chest + Back + Arms', startedAt: now, completedAt: now, durationSeconds: 3120, sets: [
+  { id: 'demo_session_1', date: shiftDate(today, -7), dayId: 'monday', title: 'Upper A', startedAt: now, completedAt: now, durationSeconds: 3120, sets: [
     { id: 'ds1', exerciseId: 'bench-press', setNumber: 1, weightKg: 50, reps: 10, completed: true },
     { id: 'ds2', exerciseId: 'bench-press', setNumber: 2, weightKg: 50, reps: 9, completed: true },
     { id: 'ds3', exerciseId: 'bench-press', setNumber: 3, weightKg: 50, reps: 8, completed: true },
@@ -35,7 +35,7 @@ const demoSessions: WorkoutSession[] = [
     { id: 'ds5', exerciseId: 'one-arm-row', setNumber: 2, weightKg: 24, reps: 11, completed: true },
     { id: 'ds6', exerciseId: 'one-arm-row', setNumber: 3, weightKg: 24, reps: 10, completed: true },
   ] },
-  { id: 'demo_session_2', date: shiftDate(today, -4), dayId: 'friday', title: 'Chest + Back + Shoulders', startedAt: now, completedAt: now, durationSeconds: 2880, sets: [
+  { id: 'demo_session_2', date: shiftDate(today, -4), dayId: 'thursday', title: 'Upper B', startedAt: now, completedAt: now, durationSeconds: 2880, sets: [
     { id: 'ds7', exerciseId: 'db-bench-press', setNumber: 1, weightKg: 22, reps: 12, completed: true },
     { id: 'ds8', exerciseId: 'db-bench-press', setNumber: 2, weightKg: 22, reps: 11, completed: true },
     { id: 'ds9', exerciseId: 'db-bench-press', setNumber: 3, weightKg: 22, reps: 10, completed: true },
@@ -44,12 +44,13 @@ const demoSessions: WorkoutSession[] = [
 
 export function createSeedData(): AppData {
   return {
-    version: 3,
+    version: 4,
     profile: {
       name: 'Kenny', age: 29, sex: 'male', heightCm: 174, startWeightKg: 83.8, currentWeightKg: 82.6, goalWeightKg: 75,
       calorieTarget: 2100, proteinTarget: 170, carbTarget: 205, fatTarget: 67,
       trainingDays: ['Monday', 'Tuesday', 'Thursday', 'Saturday'], units: 'metric',
       equipment: ['Adjustable dumbbells', 'Barbell', 'Bench', 'Dip setup', 'Bodyweight'],
+      balanceLevel: 'beginner', trainingTemplate: 'four-day-upper-lower',
     },
     foodLog,
     favorites: ['chicken', 'greek-yogurt', 'whey', 'banana'],
@@ -64,5 +65,9 @@ export function createSeedData(): AppData {
     program: defaultProgram,
     sessions: demoSessions,
     habits: [{ date: today, water: false, walk: false, sleep: true }],
+    cardioLog: [],
+    weeklyCardioTarget: 105,
+    squatProgression: { currentLevel: 'assisted-squat', stableSessions: 0, updatedAt: now },
+    progressionPlans: [],
   };
 }

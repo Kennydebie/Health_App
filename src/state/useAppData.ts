@@ -4,36 +4,28 @@ import { defaultProgram } from '../data/exercises';
 import { foodMap } from '../data/foods';
 import { addMacros, entryMacros } from '../lib/nutrition';
 import { uid } from '../lib/id';
-import type { AppData, FoodLogEntry, HabitEntry, LoggedSet, MealType, UserProfile, WeightEntry, WorkoutDay, WorkoutSession } from '../types/models';
+import { buildProgramTemplate } from '../lib/workout';
+import type { AppData, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, ProgressionPlan, SquatProgressionLevel, TrainingTemplate, UserProfile, WeightEntry, WorkoutDay, WorkoutSession } from '../types/models';
 
 const STORAGE_KEY = 'cut-forward-data-v1';
 
-const readableScheduleTitles: Partial<Record<WorkoutDay['id'], string>> = {
-  monday: 'Chest + Back + Arms',
-  tuesday: 'Legs + Glutes',
-  thursday: 'Chest + Back + Shoulders',
-  saturday: 'Legs + Glutes',
-};
-
-const previousSessionTitles: Record<string, string> = {
-  'Upper A': 'Chest + Back + Arms',
-  'Lower A': 'Legs + Glutes',
-  'Lower + Shoulders': 'Legs + Glutes',
-  'Upper B': 'Chest + Back + Shoulders',
-  'Lower B': 'Legs + Glutes',
-};
-
 export function migrateAppData(saved: AppData): AppData {
-  if (saved.version >= 3 && saved.program.length === 7) return saved;
-  const hasWeeklySchedule = saved.program.length === 7;
+  const legacy = saved as AppData & Partial<Pick<AppData, 'cardioLog' | 'weeklyCardioTarget' | 'squatProgression' | 'progressionPlans'>>;
+  if (saved.version >= 4 && saved.program.length === 7 && legacy.cardioLog && legacy.squatProgression && legacy.progressionPlans) return saved;
   return {
     ...saved,
-    version: 3,
-    profile: hasWeeklySchedule ? saved.profile : { ...saved.profile, trainingDays: ['Monday', 'Tuesday', 'Thursday', 'Saturday'] },
-    program: hasWeeklySchedule
-      ? saved.program.map((day) => ({ ...day, title: readableScheduleTitles[day.id] ?? day.title }))
-      : structuredClone(defaultProgram),
-    sessions: saved.sessions.map((session) => ({ ...session, title: previousSessionTitles[session.title] ?? session.title })),
+    version: 4,
+    profile: {
+      ...saved.profile,
+      trainingDays: ['Monday', 'Tuesday', 'Thursday', 'Saturday'],
+      balanceLevel: saved.profile.balanceLevel ?? 'beginner',
+      trainingTemplate: saved.profile.trainingTemplate ?? 'four-day-upper-lower',
+    },
+    program: structuredClone(defaultProgram),
+    cardioLog: legacy.cardioLog ?? [],
+    weeklyCardioTarget: legacy.weeklyCardioTarget ?? 105,
+    squatProgression: legacy.squatProgression ?? { currentLevel: 'assisted-squat', stableSessions: 0, updatedAt: new Date().toISOString() },
+    progressionPlans: legacy.progressionPlans ?? [],
   };
 }
 
@@ -105,23 +97,57 @@ export function useAppData() {
 
   const updateProgramDay = useCallback((day: WorkoutDay) => update((current) => ({ ...current, program: current.program.map((item) => item.id === day.id ? day : item) })), [update]);
 
+  const addCardio = useCallback((date: string, minutes: number, activity: CardioEntry['activity']) => update((current) => ({
+    ...current,
+    cardioLog: [...current.cardioLog, { id: uid('cardio'), date, minutes, activity }],
+  })), [update]);
+
+  const setWeeklyCardioTarget = useCallback((minutes: number) => update((current) => ({ ...current, weeklyCardioTarget: Math.max(30, Math.min(150, minutes)) })), [update]);
+
+  const setSquatProgression = useCallback((level: SquatProgressionLevel) => update((current) => ({
+    ...current,
+    squatProgression: { currentLevel: level, stableSessions: 0, updatedAt: new Date().toISOString() },
+    program: current.program.map((day) => ({ ...day, exercises: day.exercises.map((exercise) => exercise.variationGroup === 'squat-progression' ? { ...exercise, exerciseId: level } : exercise) })),
+  })), [update]);
+
+  const applyTrainingTemplate = useCallback((template: TrainingTemplate) => update((current) => {
+    const program = buildProgramTemplate(template, current.squatProgression.currentLevel);
+    const trainingDays = program.filter((day) => !day.isRestDay).map((day) => ({ monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday' }[day.id]));
+    return { ...current, program, profile: { ...current.profile, trainingTemplate: template, trainingDays } };
+  }), [update]);
+
+  const confirmProgression = useCallback((exerciseId: string, targetWeightKg: number, reason: ProgressionPlan['reason']) => update((current) => ({
+    ...current,
+    progressionPlans: [...current.progressionPlans.filter((item) => item.exerciseId !== exerciseId), { exerciseId, targetWeightKg, reason, confirmedAt: new Date().toISOString() }],
+  })), [update]);
+
   const startWorkout = useCallback((day: WorkoutDay) => {
     if (day.isRestDay || day.exercises.length === 0) return null;
-    const previousCompleted = data.sessions.filter((session) => session.completedAt).flatMap((session) => session.sets).filter((set) => set.completed);
+    const previousCompleted = data.sessions.filter((session) => session.completedAt).flatMap((session) => session.sets).filter((set) => set.completed && !set.isWarmup);
     const sets: LoggedSet[] = day.exercises.flatMap((exercise) => {
       const previous = previousCompleted.filter((set) => set.exerciseId === exercise.exerciseId).slice(-exercise.sets);
-      return Array.from({ length: exercise.sets }, (_, index) => ({
+      const confirmedLoad = data.progressionPlans.find((item) => item.exerciseId === exercise.exerciseId)?.targetWeightKg;
+      const workingLoad = confirmedLoad ?? previous.at(-1)?.weightKg ?? 0;
+      const warmupCount = exercise.warmupSets ?? 0;
+      const warmups = Array.from({ length: warmupCount }, (_, index) => ({
         id: uid('set'), exerciseId: exercise.exerciseId, setNumber: index + 1,
-        weightKg: previous[index]?.weightKg ?? previous.at(-1)?.weightKg ?? 0,
-        reps: previous[index]?.reps ?? 0, completed: false,
+        weightKg: workingLoad > 0 ? Math.round(workingLoad * (.45 + index * .15) * 2) / 2 : 0,
+        reps: Math.max(4, 8 - index * 2), completed: false, isWarmup: true,
       }));
+      const working = Array.from({ length: exercise.sets }, (_, index) => ({
+        id: uid('set'), exerciseId: exercise.exerciseId, setNumber: index + 1,
+        weightKg: confirmedLoad ?? previous[index]?.weightKg ?? previous.at(-1)?.weightKg ?? 0,
+        reps: previous[index]?.reps ?? 0, completed: false, isWarmup: false,
+      }));
+      return [...warmups, ...working];
     });
     const session: WorkoutSession = { id: uid('session'), date: new Date().toLocaleDateString('en-CA'), dayId: day.id, title: day.title, startedAt: new Date().toISOString(), durationSeconds: 0, sets };
-    update((current) => ({ ...current, sessions: [...current.sessions, session] }));
+    const plannedExercises = new Set(day.exercises.map((exercise) => exercise.exerciseId));
+    update((current) => ({ ...current, sessions: [...current.sessions, session], progressionPlans: current.progressionPlans.filter((item) => !plannedExercises.has(item.exerciseId)) }));
     return session.id;
-  }, [data.sessions, update]);
+  }, [data.progressionPlans, data.sessions, update]);
 
-  const updateWorkoutSet = useCallback((sessionId: string, setId: string, changes: Partial<Pick<LoggedSet, 'weightKg' | 'reps' | 'completed'>>) => update((current) => ({
+  const updateWorkoutSet = useCallback((sessionId: string, setId: string, changes: Partial<Pick<LoggedSet, 'weightKg' | 'reps' | 'completed' | 'rir'>>) => update((current) => ({
     ...current,
     sessions: current.sessions.map((session) => session.id === sessionId ? { ...session, sets: session.sets.map((set) => set.id === setId ? { ...set, ...changes } : set) } : session),
   })), [update]);
@@ -153,8 +179,9 @@ export function useAppData() {
 
   return useMemo(() => ({
     data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal,
-    saveWeight, updateProfile, updateProgramDay, startWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate,
-  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveWeight, updateProfile, updateProgramDay, startWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
+    saveWeight, updateProfile, updateProgramDay, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
+    startWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate,
+  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveWeight, updateProfile, updateProgramDay, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
 }
 
 export type AppController = ReturnType<typeof useAppData>;

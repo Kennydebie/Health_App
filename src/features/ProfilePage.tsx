@@ -42,6 +42,7 @@ export function ProfilePage({ controller }: ProfilePageProps) {
           <label>Starting weight<div className="unit-input"><input type="number" min="30" max="300" step="0.1" value={draft.startWeightKg} onChange={(event) => setNumber('startWeightKg', Number(event.target.value))} /><span>kg</span></div></label>
           <label>Goal weight<div className="unit-input"><input type="number" min="30" max="300" step="0.1" value={draft.goalWeightKg} onChange={(event) => setNumber('goalWeightKg', Number(event.target.value))} /><span>kg</span></div></label>
           <label>Units<select value={draft.units} onChange={(event) => setDraft((current) => ({ ...current, units: event.target.value as UserProfile['units'] }))}><option value="metric">Metric</option><option value="imperial">Imperial</option></select></label>
+          <label>Balance confidence<select value={draft.balanceLevel} onChange={(event) => setDraft((current) => ({ ...current, balanceLevel: event.target.value as UserProfile['balanceLevel'] }))}><option value="beginner">Needs support</option><option value="developing">Developing</option><option value="stable">Stable</option></select></label>
         </div></article>
 
         <article className="card settings-section"><header><span className="metric-icon lime"><Target size={19} /></span><div><p className="eyebrow">Nutrition</p><h2>Daily targets</h2></div><button type="button" className="secondary-button" onClick={() => setRecommendOpen(true)}><Calculator size={16} /> Recalculate</button></header><div className="target-fields">
