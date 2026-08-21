@@ -28,7 +28,7 @@ export function ProgressPage({ controller }: ProgressPageProps) {
   const exerciseIds = [...new Set(data.sessions.flatMap((session) => session.sets.map((set) => set.exerciseId)))];
   const [exerciseId, setExerciseId] = useState(exerciseIds[0] ?? 'bench-press');
   const [saved, setSaved] = useState(false);
-  const [progressTab, setProgressTab] = useState<ProgressTab>(() => (localStorage.getItem('cut-forward-progress-tab') as ProgressTab | null) ?? 'overview');
+  const [progressTab, setProgressTab] = useState<ProgressTab>('body');
   const trend = dashboard.body.trend;
   const last7 = datesInWeek(today);
 
@@ -96,12 +96,10 @@ export function ProgressPage({ controller }: ProgressPageProps) {
     { label: 'First personal record', reached: records.length > 0, detail: records.length ? `${records.length} personal ${records.length === 1 ? 'record' : 'records'}` : 'Complete a loaded exercise', Icon: Trophy },
   ];
 
-  const selectProgressTab = (tab: ProgressTab) => { setProgressTab(tab); localStorage.setItem('cut-forward-progress-tab', tab); };
-
   return <div className="page progress-page premium-progress">
     <header className="page-header"><div><h1>Progress</h1><p>Track weight, body composition, workouts and nutrition.</p></div><form className="weight-entry" onSubmit={(event) => { event.preventDefault(); if (!validWeight) return; saveWeight(weightDate, Number(weight), waist ? Number(waist) : null); setSaved(true); window.setTimeout(() => setSaved(false), 1800); }}><label>Date<input type="date" value={weightDate} onChange={(event) => setWeightDate(event.target.value)} /></label><label>Body weight<div><input type="number" inputMode="decimal" step="0.1" min="30" max="300" value={weight} onChange={(event) => setWeight(event.target.value)} /><span>kg</span></div></label><label>Waist <small>optional</small><div><input type="number" inputMode="decimal" step="0.1" min="40" max="200" placeholder="—" value={waist} onChange={(event) => setWaist(event.target.value)} /><span>cm</span></div></label><button className="primary-button" type="submit" disabled={!validWeight}>{saved ? <Check size={18} /> : <Plus size={18} />}{saved ? 'Measurement saved' : 'Log measurement'}</button></form></header>
 
-    <nav className="progress-tabs" aria-label="Progress sections">{(['overview', 'body', 'training', 'nutrition'] as const).map((tab) => <button type="button" key={tab} aria-selected={progressTab === tab} className={progressTab === tab ? 'active' : ''} onClick={() => selectProgressTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
+    <nav className="progress-tabs" aria-label="Progress sections">{(['body', 'overview', 'training', 'nutrition'] as const).map((tab) => <button type="button" key={tab} aria-selected={progressTab === tab} className={progressTab === tab ? 'active' : ''} onClick={() => setProgressTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
 
     {progressTab === 'body' ? <><FitDaysImport controller={controller} /><BodyCompositionDashboard controller={controller} /></> : null}
 

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { ArrowRight, CalendarDays, ChevronRight, Dumbbell, Flame, HeartPulse, Play, Scale, Sparkles, Target, TrendingDown, Utensils } from 'lucide-react';
 import { ProgressRing } from '../components/ProgressRing';
@@ -13,6 +13,7 @@ import { plannerWarnings } from '../lib/adaptivePlanner';
 import type { AppController } from '../state/useAppData';
 import type { SessionTemplateId } from '../types/models';
 import { getDashboardSummary } from '../lib/selectors';
+import { greetingForHour } from '../lib/greeting';
 
 interface HomePageProps { controller: AppController; setPage: (page: Page) => void; onStartWorkout: (templateId: SessionTemplateId, date?: string) => void; }
 
@@ -25,6 +26,11 @@ function weightSummary(measurementCount: number, currentAverage: number, previou
 
 export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps) {
   const { data } = controller;
+  const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentHour(new Date().getHours()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const today = toDateKey();
   const dashboard = useMemo(() => getDashboardSummary(data, today), [data, today]);
   const totals = dashboard.totals;
@@ -46,6 +52,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
   const consistency = dashboard.weekly;
   const week = dashboard.planWeek;
   const score = dashboard.daily;
+  const greeting = greetingForHour(currentHour);
 
   const weekItems: WeekStripItem[] = weekSnapshot.days.map((item) => {
     const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date(`${item.date}T12:00:00`)).toLowerCase();
@@ -84,7 +91,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
       <div className="daily-command__copy">
         <div className="daily-command__meta"><span>Week {week}</span><span>{prettyDate(today, true)}</span></div>
         <p className="eyebrow">Goal: {profile.goalWeightKg} kg</p>
-        <h1>Good morning, {profile.name}</h1>
+        <h1>{greeting}, {profile.name}</h1>
         <p className="daily-objective">Today’s recommendation: <strong>{workoutDay.isRestDay ? displayWorkoutTitle(workoutDay).toLowerCase() : `${displayWorkoutTitle(workoutDay).toLowerCase()} with controlled effort`}</strong>. {todayPlan?.plan?.recommendationReason}</p>
         <button className="primary-button command-action" type="button" onClick={action.run}><ActionIcon size={19} /> {action.label}<ArrowRight size={18} /></button>
       </div>

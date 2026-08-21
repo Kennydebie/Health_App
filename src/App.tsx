@@ -15,12 +15,14 @@ const ProfilePage = lazy(() => import('./features/ProfilePage').then((module) =>
 export default function App() {
   const controller = useAppData();
   const [page, setPage] = useState<Page>('home');
+  const [progressVisit, setProgressVisit] = useState(0);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [profileDirty, setProfileDirty] = useState(false);
   const summary = useMemo(() => getDashboardSummary(controller.data), [controller.data]);
 
   const navigate = (nextPage: Page) => {
     if (page === 'profile' && nextPage !== 'profile' && profileDirty && !window.confirm('You have unsaved profile changes. Leave without saving?')) return;
+    if (nextPage === 'progress') setProgressVisit((visit) => visit + 1);
     setPage(nextPage);
   };
 
@@ -34,10 +36,10 @@ export default function App() {
   return <>
     <AppShell page={page} setPage={navigate} name={controller.data.profile.name} planWeek={summary.planWeek} trainingStreak={summary.streak.weeks}>
       <Suspense fallback={<PageSkeleton />}>
-        {page === 'home' ? <HomePage controller={controller} setPage={setPage} onStartWorkout={startWorkout} /> : null}
+        {page === 'home' ? <HomePage controller={controller} setPage={navigate} onStartWorkout={startWorkout} /> : null}
         {page === 'food' ? <FoodPage controller={controller} /> : null}
         {page === 'workout' ? <WorkoutPage controller={controller} activeSessionId={activeSessionId} setActiveSessionId={setActiveSessionId} onStartWorkout={startWorkout} /> : null}
-        {page === 'progress' ? <ProgressPage controller={controller} /> : null}
+        {page === 'progress' ? <ProgressPage key={progressVisit} controller={controller} /> : null}
         {page === 'profile' ? <ProfilePage controller={controller} onDirtyChange={setProfileDirty} /> : null}
       </Suspense>
     </AppShell>
