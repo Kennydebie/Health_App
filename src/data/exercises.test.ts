@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultProgram, exercises } from './exercises';
+import { EXERCISE_VIDEOS } from './exerciseVideos';
 
 describe('revised weekly training schedule', () => {
   it('contains all seven days in calendar order with four lifting sessions', () => {
@@ -32,7 +33,12 @@ describe('revised weekly training schedule', () => {
 
   it('provides complete metadata and a graceful video fallback for every exercise', () => {
     expect(exercises.every((exercise) => exercise.movementPatterns && exercise.requiredEquipment.length && exercise.defaultPrescription.sets > 0)).toBe(true);
-    expect(exercises.every((exercise) => exercise.videoId === undefined || /^[\w-]{11}$/.test(exercise.videoId))).toBe(true);
+    expect(exercises).toHaveLength(27);
+    expect(Object.keys(EXERCISE_VIDEOS).sort()).toEqual(exercises.map((exercise) => exercise.id).sort());
+    expect(exercises.filter((exercise) => exercise.video.status === 'verified')).toHaveLength(23);
+    expect(exercises.filter((exercise) => exercise.video.status === 'missing').map((exercise) => exercise.id).sort()).toEqual(['assisted-squat', 'supported-goblet-squat', 'supported-reverse-lunge', 'supported-split-squat']);
+    expect(exercises.every((exercise) => exercise.video.status === 'missing' || (/^[\w-]{11}$/.test(exercise.video.sourceId) && exercise.video.embedUrl === `https://www.youtube-nocookie.com/embed/${exercise.video.sourceId}?rel=0` && !exercise.video.embedUrl.includes('autoplay')))).toBe(true);
+    expect(exercises.every((exercise) => exercise.video.status === 'missing' || (exercise.video.title.length > 5 && exercise.video.sourceName.length > 2 && exercise.video.lastReviewed === '2026-08-21'))).toBe(true);
     expect(exercises.every((exercise) => exercise.videoFallback.length > 30 && exercise.setup.length && exercise.execution.length && exercise.safety.length)).toBe(true);
     expect(exercises.every((exercise) => exercise.muscleMap.primary.length > 0 && exercise.muscleMap.preferredView)).toBe(true);
   });

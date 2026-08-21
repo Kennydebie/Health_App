@@ -989,3 +989,29 @@ input:focus, select:focus { border-color: rgba(240,138,120,.7); box-shadow: 0 0 
 @media (max-width: 430px) {
   .migration-counts { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 900px) {
+  .exercise-detail-hero { grid-template-columns: 1fr; }
+  .exercise-detail-hero > aside.exercise-anatomy-detail { min-width: 0; grid-template-columns: 1fr; justify-items: center; }
+}
+
+/* Compact workout support panels and audited exercise media */
+.workout-support-section { min-width: 0; margin: 0 0 14px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: rgba(17,25,29,.78); }
+.premium-program-main > .workout-support-section { margin: 0 24px 18px; }
+.workout-support-toggle { width: 100%; min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 15px; color: var(--text); border: 0; background: linear-gradient(135deg,rgba(240,138,120,.045),rgba(92,174,246,.025)); text-align: left; }
+.workout-support-toggle > span { min-width: 0; display: grid; gap: 4px; }.workout-support-toggle strong { font-size: 12px; }.workout-support-toggle small { overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }.workout-support-toggle > svg { flex: 0 0 auto; color: var(--muted); transition: transform .18s ease; }.workout-support-section.open .workout-support-toggle > svg { transform: rotate(90deg); }
+.workout-support-content { border-top: 1px solid var(--line-soft); }.workout-support-content > .weekly-overview,.workout-support-content > .squat-progression-card { margin: 0; border: 0; border-radius: 0; }.workout-support-content > .session-muscle-overview { margin: 0; border: 0; border-radius: 0; }
+.program-layout > .workout-support-section .workout-support-content { padding: 10px; }.program-layout > .workout-support-section .workout-guidance { gap: 10px; }.program-layout > .workout-support-section .workout-guidance .card { padding: 17px; }
+.demo-panel footer > span > span { min-width: 0; display: grid; gap: 3px; }.demo-panel footer strong { overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.demo-panel footer small { color: var(--muted); font-size: 8px; }.video-fallback.compact { min-height: 0; padding: 13px 15px; }.video-fallback.compact p { margin-top: 3px; }
+.exercise-anatomy-detail .anatomical-map { min-height: 238px; display: grid; place-items: center; }.exercise-anatomy-detail .anatomical-map.view-front,.exercise-anatomy-detail .anatomical-map.view-back { min-width: 150px; }
+
+@media (max-width: 760px) {
+  .premium-program-main > .workout-support-section { margin-inline: 15px; }
+  .exercise-detail-hero { gap: 12px; }.exercise-detail-hero > aside.exercise-anatomy-detail { min-height: 280px; }
+  .demo-panel footer { align-items: flex-start; }.demo-panel footer > span { justify-content: flex-start; }.demo-panel footer a { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 430px) {
+  .workout-support-toggle { min-height: 54px; padding: 10px 12px; }.workout-support-toggle small { max-width: 265px; }
+  .exercise-detail-hero > aside.exercise-anatomy-detail { min-height: 245px; padding: 13px; }.exercise-anatomy-detail .anatomical-map { min-height: 205px; }.exercise-anatomy-detail .anatomical-map.size-detail svg { width: 86px; height: 200px; }
+}

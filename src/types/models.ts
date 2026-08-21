@@ -208,6 +208,30 @@ export interface ExerciseMuscleMap {
   presentation?: 'exercise-role' | 'session-exposure';
 }
 
+export interface VerifiedExerciseVideo {
+  status: 'verified';
+  provider: 'youtube';
+  sourceId: string;
+  sourceUrl: string;
+  embedUrl: string;
+  title: string;
+  sourceName: string;
+  sourceChannelUrl: string;
+  lastReviewed: string;
+  exactMatch: true;
+}
+
+export interface MissingExerciseVideo {
+  status: 'missing';
+  provider: 'youtube';
+  lastReviewed: string;
+  exactMatch: false;
+  reason: string;
+  rejectedCandidates?: Array<{ sourceUrl: string; title: string; reason: string }>;
+}
+
+export type ExerciseVideo = VerifiedExerciseVideo | MissingExerciseVideo;
+
 export interface Exercise {
   id: string;
   name: string;
@@ -225,7 +249,7 @@ export interface Exercise {
   mistakes: string[];
   safety: string;
   alternatives: string[];
-  videoId?: string;
+  video: ExerciseVideo;
   videoFallback: string;
 }
 

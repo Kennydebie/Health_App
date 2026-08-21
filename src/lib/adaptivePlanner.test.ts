@@ -11,6 +11,7 @@ import {
   restoreRecommendedWeek,
   selectTrainingSession,
   sessionMuscleLoad,
+  sessionType,
   weeklyBalance,
   weekDates,
 } from './adaptivePlanner';
@@ -58,6 +59,17 @@ describe('adaptive workout planner', () => {
     expect(strength).toHaveLength(4);
     expect(plans.filter((plan) => ['cardio_recovery', 'mobility_recovery', 'full_rest'].includes(plan.selectedSessionTemplateId)).length).toBeGreaterThanOrEqual(1);
     expect(plans.every((plan) => plan.recommendationReason.length > 20)).toBe(true);
+    expect(plans.map((plan) => plan.selectedSessionTemplateId)).toEqual(['upper_a', 'lower_a', 'cardio_recovery', 'upper_b', 'mobility_recovery', 'lower_b', 'cardio_recovery']);
+    expect(strength.every((plan, index) => index === 0 || sessionType(plan.selectedSessionTemplateId) !== sessionType(strength[index - 1].selectedSessionTemplateId))).toBe(true);
+  });
+
+  it('does not treat a missed lower workout as fatigue or workout debt', () => {
+    const data = plannerData('2026-08-20', new Date('2026-08-20T12:00:00'));
+    data.trainingPlanner.dailyPlans = data.trainingPlanner.dailyPlans.map((plan) => plan.date === '2026-08-18' ? { ...plan, selectedSessionTemplateId: 'lower_a', status: 'missed' as const } : plan);
+    const lowerRecovery = recoveryForSession(data, 'lower_b', '2026-08-20', new Date('2026-08-20T12:00:00'));
+    const replanned = recalculateTrainingWeek(data, '2026-08-20', new Date('2026-08-20T12:00:00'));
+    expect(lowerRecovery.indicator).toBe('Not enough history');
+    expect(replanned.dailyPlans.filter((plan) => weekDates('2026-08-20').includes(plan.date)).every((plan) => !/debt|make up|missed workout/i.test(plan.recommendationReason))).toBe(true);
   });
 
   it('warns about Upper A after Thursday Upper B but keeps the deliberate Friday choice', () => {

@@ -93,6 +93,17 @@ export function isStrengthTemplate(templateId: SessionTemplateId) {
   return !['cardio_recovery', 'mobility_recovery', 'full_rest'].includes(templateId);
 }
 
+export function selectionSourceLabel(source: TrainingSelectionSource) {
+  const labels: Record<TrainingSelectionSource, string> = {
+    default_template: 'Original plan',
+    adaptive_recommendation: 'Recommended',
+    user_selected: 'Selected by you',
+    user_moved: 'Moved by you',
+    user_swapped: 'Swapped by you',
+  };
+  return labels[source];
+}
+
 export function workoutTemplate(program: WorkoutDay[], templateId: SessionTemplateId) {
   return isStrengthTemplate(templateId) ? program.find((day) => day.workoutId === templateId) : undefined;
 }
@@ -252,6 +263,21 @@ function scheduledStrengthOutsideDate(data: Pick<AppData, 'program' | 'trainingP
   }).length;
 }
 
+function adjacentPlanPenalty(data: Pick<AppData, 'program' | 'trainingPlanner'>, date: string, candidateId: SessionTemplateId) {
+  if (!isStrengthTemplate(candidateId)) return 0;
+  const candidate = sessionOption(data.program, candidateId);
+  let penalty = 0;
+  for (const adjacentDate of [shiftDate(date, -1), shiftDate(date, 1)]) {
+    const plan = data.trainingPlanner.dailyPlans.find((item) => item.date === adjacentDate);
+    if (!plan || ['skipped', 'missed', 'rest'].includes(plan.status) || !isStrengthTemplate(plan.selectedSessionTemplateId)) continue;
+    const adjacent = sessionOption(data.program, plan.selectedSessionTemplateId);
+    if (candidate.type === adjacent.type && (candidate.type === 'upper' || candidate.type === 'lower')) penalty -= 90;
+    const overlap = candidate.muscleGroups.filter((muscle) => adjacent.muscleGroups.includes(muscle)).length;
+    penalty -= overlap * 6;
+  }
+  return penalty;
+}
+
 export function recommendSession(data: Pick<AppData, 'program' | 'sessions' | 'cardioLog' | 'weeklyCardioTarget' | 'trainingPlanner'>, date: string, now = new Date()): SessionRecommendation {
   const active = [...data.sessions].reverse().find((session) => !session.completedAt);
   if (active && active.date === date) return { templateId: active.workoutId, reason: `Resume ${sessionOption(data.program, active.workoutId).name}; it is already in progress.`, recoveryIndicator: 'Ready', supportsRemainingTargets: true };
@@ -285,7 +311,8 @@ export function recommendSession(data: Pick<AppData, 'program' | 'sessions' | 'c
     const performed = sessionsInWeek(data.sessions, date).filter((session) => session.workoutId === option.id).length;
     const recoveryScore = recovery.indicator === 'Ready' ? 30 : recovery.indicator === 'Mostly recovered' ? 18 : recovery.indicator === 'Not enough history' ? 12 : recovery.indicator === 'Recently trained' ? -25 : -60;
     const defaultScore = option.id === defaultId ? 12 : 0;
-    return { option, recovery, score: categoryNeed * 35 + recoveryScore + defaultScore - performed * 18 };
+    const spacingScore = adjacentPlanPenalty(data, date, option.id);
+    return { option, recovery, score: categoryNeed * 35 + recoveryScore + defaultScore + spacingScore - performed * 18 };
   }).sort((a, b) => b.score - a.score);
   const best = scored[0];
   if (best && remaining.strength > 0) {
