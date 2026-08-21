@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { Activity, AlertTriangle, ArrowLeft, BadgeCheck, BarChart3, BedDouble, CalendarDays, Check, CheckCircle2, ChevronRight, Circle, Clock3, Dumbbell, ExternalLink, Flame, Footprints, GripVertical, HeartPulse, History, Info, ListChecks, Minus, Move, Pause, Pencil, Play, Plus, RefreshCw, Save, ShieldCheck, Shuffle, SkipForward, Sparkles, Target, Trophy, X } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowLeft, BadgeCheck, BarChart3, BedDouble, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock3, Dumbbell, ExternalLink, Flame, Footprints, GripVertical, HeartPulse, History, Info, ListChecks, Minus, Move, Pause, Pencil, Play, Plus, RefreshCw, Save, ShieldCheck, Shuffle, SkipForward, Sparkles, Target, Trophy, X } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { BodyFocus, ToneIcon } from '../components/Visuals';
 import { exerciseMap, exercises } from '../data/exercises';
 import { prettyDate, toDateKey } from '../lib/date';
-import { displayWorkoutTitle, getWeekSnapshot } from '../lib/engagement';
+import { datesInCalendarMonth, displayWorkoutTitle, getWeekSnapshot } from '../lib/engagement';
 import { formatDuration, workoutVolume } from '../lib/progress';
 import { analyzeWeeklyProgram, exceedsBalanceLevel, isEquipmentCompatible, progressionRecommendation, squatProgressionLevels, squatReadinessCriteria } from '../lib/workout';
 import { availableSessionOptions, isStrengthTemplate, lastPerformed, plannerWarnings, recoveryForSession, sessionOption, sessionType, weeklyBalance, weekDates, workoutTemplate } from '../lib/adaptivePlanner';
@@ -17,6 +17,9 @@ interface WorkoutPageProps {
   setActiveSessionId: (id: string | null) => void;
   onStartWorkout: (templateId: SessionTemplateId, date?: string) => void;
 }
+
+const calendarMonthFormatter = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' });
+const calendarDayFormatter = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric' });
 
 function previousSets(sessions: WorkoutSession[], exerciseId: string, currentSessionId?: string) {
   return sessions.filter((session) => session.id !== currentSessionId && session.completedAt).flatMap((session) => session.sets).filter((set) => set.exerciseId === exerciseId && set.completed && !set.isWarmup).slice(-3);
@@ -195,9 +198,46 @@ function ActiveWorkout({ controller, session, onBack, onFinished }: { controller
   </div>;
 }
 
+function TrainingCalendar({ sessions, onOpen }: { sessions: WorkoutSession[]; onOpen: (session: WorkoutSession) => void }) {
+  const today = toDateKey();
+  const [monthKey, setMonthKey] = useState(() => today.slice(0, 7));
+  const calendarDates = useMemo(() => datesInCalendarMonth(monthKey), [monthKey]);
+  const completedSessions = useMemo(() => sessions.filter((session) => session.completedAt && session.sets.some((set) => set.completed && !set.isWarmup)), [sessions]);
+  const sessionsByDate = useMemo(() => {
+    const grouped = new Map<string, WorkoutSession[]>();
+    for (const session of completedSessions) grouped.set(session.date, [...(grouped.get(session.date) ?? []), session]);
+    return grouped;
+  }, [completedSessions]);
+  const monthSessions = useMemo(() => completedSessions.filter((session) => session.date.startsWith(monthKey)), [completedSessions, monthKey]);
+  const trainedDays = new Set(monthSessions.map((session) => session.date)).size;
+  const workingSets = monthSessions.reduce((sum, session) => sum + session.sets.filter((set) => set.completed && !set.isWarmup).length, 0);
+  const monthLabel = calendarMonthFormatter.format(new Date(`${monthKey}-01T12:00:00`));
+  const shiftMonth = (amount: number) => {
+    const date = new Date(`${monthKey}-01T12:00:00`);
+    date.setMonth(date.getMonth() + amount);
+    setMonthKey(toDateKey(date).slice(0, 7));
+  };
+
+  return <section className="training-calendar card">
+    <header><div><p className="eyebrow">Actual training history</p><h2>{monthLabel}</h2><p>Every marker is a workout you actually completed—not a recommendation or missed plan.</p></div><div className="calendar-month-controls"><button type="button" className="icon-button" onClick={() => shiftMonth(-1)} aria-label="Previous month"><ChevronLeft size={18}/></button><button type="button" className="calendar-today-button" onClick={() => setMonthKey(today.slice(0, 7))}>Today</button><button type="button" className="icon-button" onClick={() => shiftMonth(1)} aria-label="Next month"><ChevronRight size={18}/></button></div></header>
+    <div className="calendar-month-summary"><span><strong>{trainedDays}</strong><small>days trained</small></span><span><strong>{monthSessions.length}</strong><small>workouts</small></span><span><strong>{workingSets}</strong><small>working sets</small></span></div>
+    <div className="training-calendar-scroll"><div className="training-calendar-grid" role="grid" aria-label={`${monthLabel} training calendar`}>
+      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <span className="calendar-weekday" role="columnheader" key={day}>{day}</span>)}
+      {calendarDates.map((date) => {
+        const daySessions = sessionsByDate.get(date) ?? [];
+        const inMonth = date.startsWith(monthKey);
+        const label = calendarDayFormatter.format(new Date(`${date}T12:00:00`));
+        const sessionLabels = daySessions.map((session) => ({ id: session.id, name: displayWorkoutTitle({ id: session.dayId, workoutId: session.workoutId, title: session.title }) }));
+        return <button type="button" role="gridcell" key={date} disabled={!daySessions.length} className={`${inMonth ? '' : 'outside-month'} ${date === today ? 'today' : ''} ${daySessions.length ? 'trained' : ''}`} aria-label={`${label}${sessionLabels.length ? `: ${sessionLabels.map((item) => item.name).join(', ')}` : ': no completed workout'}`} onClick={() => daySessions.length && onOpen(daySessions.at(-1)!)}><span>{Number(date.slice(-2))}</span><div>{sessionLabels.slice(0, 2).map((item) => <strong key={item.id}>{item.name}</strong>)}{sessionLabels.length > 2 ? <small>+{sessionLabels.length - 2} more</small> : null}</div></button>;
+      })}
+    </div></div>
+    <footer><span><i/> Completed strength session</span><small>Select a trained day to open its full workout log.</small></footer>
+  </section>;
+}
+
 function WorkoutHistory({ sessions, onOpen }: { sessions: WorkoutSession[]; onOpen: (session: WorkoutSession) => void }) {
   const completed = [...sessions].filter((session) => session.completedAt).sort((a, b) => b.date.localeCompare(a.date));
-  return <section className="history-list">{completed.length ? completed.map((session) => <button type="button" className="history-card card" key={session.id} onClick={() => onOpen(session)}><div className="history-date"><span>{new Date(`${session.date}T12:00:00`).getDate()}</span><small>{new Intl.DateTimeFormat('en', { month: 'short' }).format(new Date(`${session.date}T12:00:00`))}</small></div><div><p className="eyebrow">{prettyDate(session.date)}</p><h3>{displayWorkoutTitle({ id: session.dayId, workoutId: session.workoutId, title: session.title })}</h3><span>{formatDuration(session.durationSeconds)} · {session.sets.filter((set) => set.completed && !set.isWarmup).length} working sets</span></div><div className="volume-stat"><strong>{Math.round(workoutVolume(session)).toLocaleString()}</strong><span>kg volume</span></div><ChevronRight size={19} /></button>) : <div className="empty-state card"><History size={30} /><h3>No workouts yet</h3><p>Finish your first session and the full log will appear here.</p></div>}</section>;
+  return <section className="history-log"><div className="section-title"><div><p className="eyebrow">Workout details</p><h2>Completed session log</h2></div><span>{completed.length} saved</span></div><div className="history-list">{completed.length ? completed.map((session) => <button type="button" className="history-card card" key={session.id} onClick={() => onOpen(session)}><div className="history-date"><span>{new Date(`${session.date}T12:00:00`).getDate()}</span><small>{new Intl.DateTimeFormat('en', { month: 'short' }).format(new Date(`${session.date}T12:00:00`))}</small></div><div><p className="eyebrow">{prettyDate(session.date)}</p><h3>{displayWorkoutTitle({ id: session.dayId, workoutId: session.workoutId, title: session.title })}</h3><span>{formatDuration(session.durationSeconds)} · {session.sets.filter((set) => set.completed && !set.isWarmup).length} working sets</span></div><div className="volume-stat"><strong>{Math.round(workoutVolume(session)).toLocaleString()}</strong><span>kg volume</span></div><ChevronRight size={19} /></button>) : <div className="empty-state card"><History size={30} /><h3>No workouts yet</h3><p>Finish your first session and the full log will appear here.</p></div>}</div></section>;
 }
 
 const templateOptions: Array<{ id: TrainingTemplate; label: string; detail: string }> = [
@@ -369,7 +409,7 @@ export function WorkoutPage({ controller, activeSessionId, setActiveSessionId, o
   if (activeSession && !activeSession.completedAt && !hideActiveSession) return <ActiveWorkout controller={controller} session={activeSession} onBack={() => setHideActiveSession(true)} onFinished={() => { setActiveSessionId(null); setHideActiveSession(true); setView('history'); }} />;
 
   return <div className="page workout-page">
-    <header className="page-header workout-header"><div><p className="eyebrow">Adaptive strength + recovery planner</p><h1>Your week. Your choice.</h1><p>See the coach’s recommendation, choose what fits today, and keep weekly balance without tying workouts permanently to weekdays.</p></div><div className="workout-header-actions"><button type="button" className="secondary-button" onClick={() => setCustomizerOpen(true)}><CalendarDays size={17}/> Customize week</button><div className="view-toggle"><button type="button" className={view === 'program' ? 'active' : ''} onClick={() => setView('program')}><Dumbbell size={17} /> Planner</button><button type="button" className={view === 'history' ? 'active' : ''} onClick={() => setView('history')}><History size={17} /> History</button></div></div></header>
+    <header className="page-header workout-header"><div><p className="eyebrow">Adaptive strength + recovery planner</p><h1>Your week. Your choice.</h1><p>See the coach’s recommendation, choose what fits today, and keep weekly balance without tying workouts permanently to weekdays.</p></div><div className="workout-header-actions"><button type="button" className="secondary-button" onClick={() => setCustomizerOpen(true)}><CalendarDays size={17}/> Customize week</button><div className="view-toggle"><button type="button" className={view === 'program' ? 'active' : ''} onClick={() => setView('program')}><Dumbbell size={17} /> Planner</button><button type="button" className={view === 'history' ? 'active' : ''} onClick={() => setView('history')}><CalendarDays size={17} /> Calendar</button></div></div></header>
     <div className="workout-safety"><ShieldCheck size={18} /><p><strong>Safety first.</strong> Stop for sharp pain, dizziness, or instability. Regress the movement and seek professional assessment when appropriate.</p></div>
     {view === 'program' ? <>
       {activeSession && !activeSession.completedAt ? <button type="button" className="resume-banner" onClick={() => setHideActiveSession(false)}><Play size={18} /><span><strong>{displayWorkoutTitle({ id: activeSession.dayId, workoutId: activeSession.workoutId, title: activeSession.title })} is in progress</strong><small>{activeSession.sets.filter((set) => set.completed && !set.isWarmup).length} working sets complete</small></span><ChevronRight size={18} /></button> : null}
@@ -392,7 +432,7 @@ export function WorkoutPage({ controller, activeSessionId, setActiveSessionId, o
       </section>
       <WeeklyOverview controller={controller} />
       <SquatProgressionCard controller={controller} onDetails={setDetails} />
-    </> : <WorkoutHistory sessions={controller.data.sessions} onOpen={setHistorySession} />}
+    </> : <div className="calendar-history-view"><TrainingCalendar sessions={controller.data.sessions} onOpen={setHistorySession} /><WorkoutHistory sessions={controller.data.sessions} onOpen={setHistorySession} /></div>}
     {details ? <ExerciseDetail exercise={details} onClose={() => setDetails(null)} /> : null}
     {editingDay ? <ProgramEditor day={editingDay} program={controller.data.program} profile={controller.data.profile} onSave={controller.updateProgramDay} onClose={() => setEditingDay(null)} /> : null}
     {chooser && selectedPlan ? <SessionChooser controller={controller} date={chooser.date} plan={controller.data.trainingPlanner.dailyPlans.find((plan) => plan.date === chooser.date) ?? selectedPlan} onClose={() => setChooser(null)} onSelected={() => { setReplanReview(chooser); setChooser(null); }} /> : null}

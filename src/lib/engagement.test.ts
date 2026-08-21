@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSeedData } from '../data/seed';
 import { recalculateTrainingWeek } from './adaptivePlanner';
-import { activePlanWeek, dailyScore, datesInWeek, displayWorkoutTitle, getWeekSnapshot, personalRecordEvents, trainingWeekStreak, weeklyConsistency } from './engagement';
+import { activePlanWeek, dailyScore, datesInCalendarMonth, datesInWeek, displayWorkoutTitle, getWeekSnapshot, personalRecordEvents, trainingWeekStreak, weeklyConsistency } from './engagement';
 
 describe('engagement helpers', () => {
   it('uses plain-language workout names without changing stored titles', () => {
@@ -12,6 +12,13 @@ describe('engagement helpers', () => {
 
   it('builds an honest Monday-to-Sunday week', () => {
     expect(datesInWeek('2026-08-21')).toEqual(['2026-08-17', '2026-08-18', '2026-08-19', '2026-08-20', '2026-08-21', '2026-08-22', '2026-08-23']);
+  });
+
+  it('builds a stable Monday-first six-week calendar grid', () => {
+    const dates = datesInCalendarMonth('2026-08');
+    expect(dates).toHaveLength(42);
+    expect(dates[0]).toBe('2026-07-27');
+    expect(dates.at(-1)).toBe('2026-09-06');
   });
 
   it('derives plan week, streak and consistency from stored records', () => {

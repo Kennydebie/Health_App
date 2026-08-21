@@ -36,6 +36,13 @@ export function datesInWeek(dateKey = toDateKey()): string[] {
   return Array.from({ length: 7 }, (_, index) => shiftDate(start, index));
 }
 
+export function datesInCalendarMonth(monthKey: string): string[] {
+  const first = `${monthKey}-01`;
+  const weekday = new Date(`${first}T12:00:00`).getDay();
+  const gridStart = shiftDate(first, -((weekday + 6) % 7));
+  return Array.from({ length: 42 }, (_, index) => shiftDate(gridStart, index));
+}
+
 export type PlanDayStatus = 'completed' | 'today' | 'upcoming' | 'skipped' | 'missed' | 'not-scheduled';
 
 export interface WeekPlanDay {
