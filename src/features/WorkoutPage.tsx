@@ -104,20 +104,25 @@ function RestTimer({ initialSeconds, onClose }: RestTimerProps) {
 }
 
 function ActiveWorkout({ controller, session, onBack, onFinished }: { controller: AppController; session: WorkoutSession; onBack: () => void; onFinished: () => void }) {
-  const day = controller.data.program.find((item) => item.id === session.dayId)!;
-  const [exerciseId, setExerciseId] = useState(session.sets.find((set) => !set.completed)?.exerciseId ?? day.exercises[0].exerciseId);
+  const day = controller.data.program.find((item) => item.id === session.dayId) ?? controller.data.program.find((item) => !item.isRestDay) ?? controller.data.program[0];
+  const sessionExerciseIds = [...new Set(session.sets.map((set) => set.exerciseId))].filter((id) => exerciseMap.has(id));
+  const exerciseOrder = sessionExerciseIds.length ? sessionExerciseIds : day.exercises.map((item) => item.exerciseId).filter((id) => exerciseMap.has(id));
+  const initialExerciseId = session.sets.find((set) => !set.completed && exerciseMap.has(set.exerciseId))?.exerciseId ?? exerciseOrder[0];
+  const [exerciseId, setExerciseId] = useState(initialExerciseId);
   const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 1000));
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
   const [details, setDetails] = useState<Exercise | null>(null);
   const [confirmedExerciseId, setConfirmedExerciseId] = useState<string | null>(null);
   useEffect(() => { const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000); return () => window.clearInterval(timer); }, []);
-  const prescription = day.exercises.find((item) => item.exerciseId === exerciseId)!;
+  const currentExercise = exerciseMap.get(exerciseId) ?? exerciseMap.get(day.exercises[0]?.exerciseId);
+  if (!currentExercise) return <div className="empty-state card"><Info size={30} /><h3>This saved workout cannot be resumed.</h3><p>Your completed history is still preserved. Return to the program and start a current session.</p><button type="button" className="secondary-button" onClick={onBack}>Back to program</button></div>;
+  const scheduledPrescription = day.exercises.find((item) => item.exerciseId === exerciseId);
   const currentSets = session.sets.filter((set) => set.exerciseId === exerciseId);
+  const prescription = scheduledPrescription ?? { exerciseId, ...currentExercise.defaultPrescription, sets: Math.max(1, currentSets.filter((set) => !set.isWarmup).length) };
   const previous = previousSets(controller.data.sessions, exerciseId, session.id);
   const progress = progressionRecommendation(controller.data.sessions, exerciseId, prescription, session.id);
   const workingCompleted = session.sets.filter((set) => set.completed && !set.isWarmup).length;
   const totalWorking = session.sets.filter((set) => !set.isWarmup).length;
-  const currentExercise = exerciseMap.get(exerciseId)!;
   const completeSet = (set: LoggedSet) => { controller.updateWorkoutSet(session.id, set.id, { completed: !set.completed }); if (!set.completed) setRestSeconds(set.isWarmup ? 60 : prescription.restSeconds); };
 
   return <div className="active-workout page workout-page">
@@ -125,7 +130,7 @@ function ActiveWorkout({ controller, session, onBack, onFinished }: { controller
     <div className="session-safety"><ShieldCheck size={17} /> Stop for sharp pain, dizziness, or instability. Regress the movement and seek professional assessment when appropriate.</div>
     <div className="session-progress"><span style={{ width: `${totalWorking ? workingCompleted / totalWorking * 100 : 0}%` }} /></div>
     <div className="active-layout">
-      <aside className="session-exercises"><p className="eyebrow">Exercise order</p>{day.exercises.map((item, index) => { const sets = session.sets.filter((set) => set.exerciseId === item.exerciseId && !set.isWarmup); const done = sets.filter((set) => set.completed).length; return <button type="button" key={item.exerciseId} onClick={() => setExerciseId(item.exerciseId)} className={exerciseId === item.exerciseId ? 'active' : done === sets.length ? 'done' : ''}><span>{done === sets.length ? <Check size={16} /> : index + 1}</span><p>{exerciseMap.get(item.exerciseId)?.name}<small>{done} / {sets.length} working sets</small></p><ChevronRight size={17} /></button>; })}<button type="button" className="finish-session" onClick={() => { controller.finishWorkout(session.id, elapsed); onFinished(); }} disabled={workingCompleted === 0}><Trophy size={18} /> Finish workout</button></aside>
+      <aside className="session-exercises"><p className="eyebrow">Exercise order</p>{exerciseOrder.map((itemExerciseId, index) => { const sets = session.sets.filter((set) => set.exerciseId === itemExerciseId && !set.isWarmup); const done = sets.filter((set) => set.completed).length; return <button type="button" key={itemExerciseId} onClick={() => setExerciseId(itemExerciseId)} className={exerciseId === itemExerciseId ? 'active' : done === sets.length && sets.length > 0 ? 'done' : ''}><span>{done === sets.length && sets.length > 0 ? <Check size={16} /> : index + 1}</span><p>{exerciseMap.get(itemExerciseId)?.name}<small>{done} / {sets.length} working sets</small></p><ChevronRight size={17} /></button>; })}<button type="button" className="finish-session" onClick={() => { controller.finishWorkout(session.id, elapsed); onFinished(); }} disabled={workingCompleted === 0}><Trophy size={18} /> Finish workout</button></aside>
       <section className="set-logger">
         <header><div><p className="eyebrow">Current exercise</p><h2>{currentExercise.name}</h2><p>Target: {prescription.sets} × {prescription.repMin}–{prescription.repMax} · {prescription.rir} RIR · Rest {formatDuration(prescription.restSeconds)}</p>{prescription.notes ? <small className="exercise-note">{prescription.notes}</small> : null}</div><button type="button" className="secondary-button" onClick={() => setDetails(currentExercise)}>Technique <ChevronRight size={17} /></button></header>
         <div className="previous-performance"><span>Previous working sets</span>{previous.length ? previous.map((set) => <strong key={set.id}>{set.weightKg} kg × {set.reps}</strong>) : <em>No previous performance—start conservatively.</em>}</div>
