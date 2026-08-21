@@ -272,7 +272,7 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
 
     {step === 'success' ? <div className="fitdays-success"><span><Check size={30} /></span><p className="eyebrow">Import complete</p><h3>FitDays measurement added</h3><p>{savedHistorical ? 'The reading was added to history. Your newer current weight stayed unchanged.' : 'Your current body summary, charts and measurement history are up to date.'}</p><button type="button" className="secondary-button" onClick={reset}><ImagePlus size={17} /> Import another screenshot</button></div> : null}
 
-    <Modal open={Boolean(duplicate)} onClose={() => setDuplicateId(null)} title="Possible duplicate measurement" subtitle="A saved entry has a similar time and weight.">
+    <Modal open={Boolean(duplicate)} onClose={() => setDuplicateId(null)} title="Possible duplicate measurement" subtitle="A saved entry has a similar time and weight." size="small">
       {duplicate ? <div className="duplicate-review"><p><strong>{formatMeasurementTimestamp(duplicate.measuredAt)}</strong><span>{duplicate.weightKg == null ? 'Weight not available' : `${duplicate.weightKg} kg`}</span></p><div><button type="button" className="primary-button" onClick={() => completeSave(duplicate.id)}>Replace existing entry</button><button type="button" className="secondary-button" onClick={() => completeSave()}>Keep both entries</button><button type="button" className="text-button" onClick={reset}>Cancel import</button></div></div> : null}
     </Modal>
   </section>;

@@ -164,7 +164,7 @@ export function FoodPage({ controller }: FoodPageProps) {
         })}
       </section>
 
-      <Modal open={addOpen} onClose={closeAdd} title={selectedFood ? 'Choose quantity' : 'Add food'} subtitle={selectedFood ? `Log ${selectedFood.name} to ${relativeDay(date).toLowerCase()}.` : 'Search real foods or choose a recent favorite.'} wide={!selectedFood}>
+      <Modal open={addOpen} onClose={closeAdd} title={selectedFood ? 'Choose quantity' : 'Add food'} subtitle={selectedFood ? `Log ${selectedFood.name} to ${relativeDay(date).toLowerCase()}.` : 'Search real foods or choose a recent favorite.'} size={selectedFood ? 'medium' : 'large'}>
         {selectedFood ? <FoodForm food={selectedFood} defaultMeal={defaultMeal} submitLabel="Add to diary" onSave={(form) => { addFood({ ...form, foodId: selectedFood.id, date }); closeAdd(); }} /> : <div className="food-search">
           <label className="search-field"><Search size={19} /><input autoFocus type="search" placeholder="Search chicken, banana, skyr…" value={query} onChange={(event) => setQuery(event.target.value)} />{query ? <button type="button" onClick={() => setQuery('')} aria-label="Clear search"><X size={17} /></button> : null}</label>
           <div className="food-search__meta"><span>{filteredFoods.length} foods</span><span><Star size={14} /> Favorites first</span></div>
