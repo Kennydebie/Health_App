@@ -3,6 +3,8 @@ dist
 .vite
 .pnpm-store
 *.tsbuildinfo
+.wrangler
+.dev.vars*
 *.local
 *.log
 test-results

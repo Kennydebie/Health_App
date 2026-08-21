@@ -12,21 +12,24 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "5.9.3",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest",
-    "recharts": "latest"
+    "recharts": "latest",
+    "typescript": "5.9.3",
+    "vite": "latest"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "1.37.1",
+    "@eslint/js": "latest",
+    "@openai/sites-vite-plugin": "0.1.0",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "eslint": "latest",
-    "@eslint/js": "latest",
-    "typescript-eslint": "latest",
     "eslint-plugin-react-hooks": "latest",
     "eslint-plugin-react-refresh": "latest",
-    "vitest": "latest"
+    "typescript-eslint": "latest",
+    "vitest": "latest",
+    "wrangler": "4.92.0"
   }
 }
