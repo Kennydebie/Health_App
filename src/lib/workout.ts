@@ -92,7 +92,7 @@ function cloneRecoveryDays(): WorkoutDay[] {
     cardioTargetMinutes: day.cardioTargetMinutes ?? 25,
     cardioSuggestion: day.cardioSuggestion ?? 'Easy walk, bike or other low-impact cardio at a conversational pace.',
     recovery: day.recovery ?? [
-      'Keep the effort easy and finish feeling better than you started.',
+      'Keep the effort easy enough to support recovery.',
       'Add a short mobility session only if it feels useful.',
       'Prioritise sleep and normal meals before the next strength day.',
     ],
@@ -126,9 +126,9 @@ export function buildProgramTemplate(template: TrainingTemplate, squatLevel: Squ
   const makeTrainingDay = (index: number, workoutId: WorkoutId, title: string, focus: string, exercises: ProgramExercise[]) => {
     program[index] = { ...program[index], workoutId, title, focus, duration: '60–75 min', isRestDay: false, cardioTargetMinutes: undefined, cardioSuggestion: undefined, recovery: undefined, exercises: structuredClone(exercises).map((item) => item.variationGroup === 'squat-progression' ? { ...item, exerciseId: squatLevel } : item) };
   };
-  makeTrainingDay(0, 'full_body_a', 'Full body A', 'Push + pull + squat', fullBodyA);
-  makeTrainingDay(3, 'full_body_b', 'Full body B', 'Shoulders + hinge + single-leg', fullBodyB);
-  if (template === 'three-day-full-body') makeTrainingDay(5, 'full_body_c', 'Full body C', 'Alternating full-body session', fullBodyA);
+  makeTrainingDay(0, 'full_body_a', 'Full body A', 'Push, pull and squat', fullBodyA);
+  makeTrainingDay(3, 'full_body_b', 'Full body B', 'Shoulders, hip hinge and single-leg work', fullBodyB);
+  if (template === 'three-day-full-body') makeTrainingDay(5, 'full_body_c', 'Full body C', 'Full-body workout', fullBodyA);
   return program;
 }
 

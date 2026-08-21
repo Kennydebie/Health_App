@@ -9,11 +9,11 @@ import { entryMacros, roundMacro, servingAmount } from '../lib/nutrition';
 import type { AppController } from '../state/useAppData';
 import type { FoodItem, FoodLogEntry, MealType } from '../types/models';
 
-const meals: Array<{ id: MealType; label: string; time: string }> = [
-  { id: 'breakfast', label: 'Breakfast', time: 'Morning' },
-  { id: 'lunch', label: 'Lunch', time: 'Midday' },
-  { id: 'dinner', label: 'Dinner', time: 'Evening' },
-  { id: 'snacks', label: 'Snacks', time: 'Any time' },
+const meals: Array<{ id: MealType; label: string }> = [
+  { id: 'breakfast', label: 'Breakfast' },
+  { id: 'lunch', label: 'Lunch' },
+  { id: 'dinner', label: 'Dinner' },
+  { id: 'snacks', label: 'Snacks' },
 ];
 
 const mealVisuals: Record<MealType, { Icon: typeof Coffee; tone: VisualTone }> = {
@@ -107,7 +107,7 @@ export function FoodPage({ controller }: FoodPageProps) {
   return (
     <div className="page food-page">
       <header className="page-header food-header">
-        <div><p className="eyebrow">Nutrition diary</p><h1>Fuel the cut.</h1><p>Every quantity changes your plan in real time.</p></div>
+        <div><h1>Food</h1><p>Track meals, calories and macros.</p></div>
         <button className="primary-button" type="button" onClick={() => openAdd('breakfast')}><Plus size={19} /> Add food</button>
       </header>
 
@@ -139,7 +139,7 @@ export function FoodPage({ controller }: FoodPageProps) {
         <div className="recent-foods"><span>Recent</span>{data.recentFoodIds.slice(0, 4).map((id) => { const food = foodMap.get(id); return food ? <button type="button" key={id} onClick={() => { setSelectedFood(food); setDefaultMeal('snacks'); setAddOpen(true); }}><FoodImage src={food.image} alt={food.name} /><span>{food.name}</span></button> : null; })}</div>
       </section>
 
-      <section className="frequent-foods" aria-label="Frequently used foods"><div><p className="eyebrow">Frequent foods</p><h2>Quick, familiar choices</h2></div><div>{data.favorites.slice(0, 5).map((id) => { const food = foodMap.get(id); return food ? <button type="button" key={id} onClick={() => { setSelectedFood(food); setDefaultMeal('snacks'); setAddOpen(true); }}><FoodImage src={food.image} alt={food.name} /><span><strong>{food.name}</strong><small>{food.protein} g protein / 100{food.unit}</small></span><Plus size={16} /></button> : null; })}</div></section>
+      <section className="frequent-foods" aria-label="Frequently used foods"><div><h2>Frequently used foods</h2></div><div>{data.favorites.slice(0, 5).map((id) => { const food = foodMap.get(id); return food ? <button type="button" key={id} onClick={() => { setSelectedFood(food); setDefaultMeal('snacks'); setAddOpen(true); }}><FoodImage src={food.image} alt={food.name} /><span><strong>{food.name}</strong><small>{food.protein} g protein / 100{food.unit}</small></span><Plus size={16} /></button> : null; })}</div></section>
 
       <section className="meal-grid meal-timeline">
         {meals.map((meal) => {
@@ -147,7 +147,7 @@ export function FoodPage({ controller }: FoodPageProps) {
           const mealMacros = entries.reduce((total, entry) => { const food = foodMap.get(entry.foodId); if (!food) return total; const macros = entryMacros(food, entry); return { calories: total.calories + macros.calories, protein: total.protein + macros.protein }; }, { calories: 0, protein: 0 });
           const visual = mealVisuals[meal.id];
           return <article className={`meal-card card meal-${meal.id}`} key={meal.id}>
-            <header><div className="meal-heading"><ToneIcon Icon={visual.Icon} tone={visual.tone} /><div><p className="eyebrow">{meal.time}</p><h2>{meal.label}</h2></div></div><div><strong>{Math.round(mealMacros.calories)}</strong><span>kcal · {Math.round(mealMacros.protein)}g protein</span></div></header>
+            <header><div className="meal-heading"><ToneIcon Icon={visual.Icon} tone={visual.tone} /><div><h2>{meal.label}</h2></div></div><div><strong>{Math.round(mealMacros.calories)}</strong><span>kcal · {Math.round(mealMacros.protein)}g protein</span></div></header>
             <div className="meal-items">
               {entries.length ? entries.map((entry) => {
                 const food = foodMap.get(entry.foodId); if (!food) return null;
@@ -157,7 +157,7 @@ export function FoodPage({ controller }: FoodPageProps) {
                   <div><strong>{food.name}</strong><span>{Math.round(amount)} {food.unit} · {roundMacro(macros.protein)}g protein</span></div>
                   <p><strong>{Math.round(macros.calories)}</strong><span>kcal</span></p><Pencil size={16} />
                 </button>;
-              }) : <div className="empty-meal"><UtensilsCrossed size={22} /><p>Nothing logged yet.<span>Add food when you're ready.</span></p></div>}
+              }) : <div className="empty-meal"><UtensilsCrossed size={22} /><p>No food logged<span>Use “Add to {meal.label.toLowerCase()}” to add an item.</span></p></div>}
             </div>
             <button type="button" className="add-meal-button" onClick={() => openAdd(meal.id)}><Plus size={17} /> Add to {meal.label.toLowerCase()}</button>
           </article>;
@@ -175,7 +175,7 @@ export function FoodPage({ controller }: FoodPageProps) {
         </div>}
       </Modal>
 
-      <Modal open={Boolean(editEntry)} onClose={() => setEditEntry(null)} title="Edit food" subtitle="Changes recalculate every total immediately.">
+      <Modal open={Boolean(editEntry)} onClose={() => setEditEntry(null)} title="Edit food" subtitle="Saving changes updates the daily totals.">
         {editEntry && foodMap.get(editEntry.foodId) ? <>
           <FoodForm food={foodMap.get(editEntry.foodId)!} initial={editEntry} defaultMeal={editEntry.meal} submitLabel="Save changes" onSave={(form) => { updateFood(editEntry.id, form); setEditEntry(null); }} />
           <div className="destructive-actions"><button type="button" onClick={() => { duplicateFood(editEntry.id); setEditEntry(null); }}><Copy size={17} /> Duplicate</button><button type="button" className="danger" onClick={() => { deleteFood(editEntry.id); setEditEntry(null); }}><Trash2 size={17} /> Delete</button></div>

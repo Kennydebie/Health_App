@@ -6,7 +6,7 @@ import { activePlanWeek, dailyScore, datesInCalendarMonth, datesInWeek, displayW
 describe('engagement helpers', () => {
   it('uses plain-language workout names without changing stored titles', () => {
     const data = createSeedData();
-    expect(displayWorkoutTitle(data.program[0])).toBe('Upper Body · Chest & Back');
+    expect(displayWorkoutTitle(data.program[0])).toBe('Chest, back & arms');
     expect(data.program[0].title).toBe('Upper A');
   });
 

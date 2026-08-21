@@ -5,19 +5,19 @@ import { isStrengthTemplate, workoutDayForSession } from './adaptivePlanner';
 import type { AppData, BodyMeasurement, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 const workoutDisplayNames: Partial<Record<WorkoutId, string>> = {
-  upper_a: 'Upper Body · Chest & Back',
+  upper_a: 'Chest, back & arms',
   lower_a: 'Legs · Squat & Hamstrings',
-  upper_b: 'Upper Body · Shoulders & Back',
+  upper_b: 'Shoulders, back & arms',
   lower_b: 'Legs · Glutes & Hamstrings',
-  full_body_a: 'Full Body · Session A',
-  full_body_b: 'Full Body · Session B',
-  full_body_c: 'Full Body · Session C',
+  full_body_a: 'Full body 1',
+  full_body_b: 'Full body 2',
+  full_body_c: 'Full body 3',
 };
 
 const legacyDayDisplayNames: Partial<Record<WorkoutDay['id'], string>> = {
-  monday: 'Upper Body · Chest & Back',
+  monday: 'Chest, back & arms',
   tuesday: 'Legs · Squat & Hamstrings',
-  thursday: 'Upper Body · Shoulders & Back',
+  thursday: 'Shoulders, back & arms',
   saturday: 'Legs · Glutes & Hamstrings',
 };
 

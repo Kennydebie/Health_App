@@ -51,7 +51,7 @@ function friendlyAnalysisError(status: number, code?: string) {
   if (status === 429) return 'You have reached the screenshot-analysis limit for now. Please try again later.';
   if (status === 413) return 'That image is too large. Choose a screenshot under 12 MB.';
   if (status === 415) return 'This image format is not supported here. Try PNG, JPEG, or WebP.';
-  if (code === 'ai_unavailable') return 'AI analysis is temporarily unavailable. You can retry or add the weight manually above.';
+  if (code === 'ai_unavailable') return 'Screenshot analysis is temporarily unavailable. Try again or enter your weight manually.';
   if (code === 'image_unreadable') return 'The screenshot could not be interpreted. Try a sharper image with the full FitDays result visible.';
   return 'We could not analyze this screenshot. Please retry with a clearer image.';
 }
@@ -203,7 +203,7 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
   return <section className={`fitdays-module card fitdays-${step}`} aria-labelledby="fitdays-title">
     <div className="fitdays-heading">
       <div className="fitdays-mark"><ScanLine size={24} /><Sparkles size={13} /></div>
-      <div><p className="eyebrow">AI screenshot import</p><h2 id="fitdays-title">FitDays Import</h2><p>Turn a FitDays screenshot into structured measurements—then review every value before it is saved.</p></div>
+      <div><h2 id="fitdays-title">FitDays Import</h2><p>Upload a FitDays screenshot to add your body measurements.</p></div>
       {step !== 'idle' && step !== 'success' ? <button type="button" className="fitdays-reset" onClick={reset}><X size={16} /> Start over</button> : null}
     </div>
 
@@ -216,29 +216,29 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
         <UploadCloud size={31} /><strong>Drop your FitDays screenshot here</strong><span>PNG, JPEG, WebP · HEIC when your browser supports it · max 12 MB</span>
       </div>
       <div className="fitdays-actions">
-        <button type="button" className="primary-button" onClick={() => galleryInput.current?.click()}><ImagePlus size={18} /> Import FitDays screenshot</button>
+        <button type="button" className="primary-button" onClick={() => galleryInput.current?.click()}><ImagePlus size={18} /> Import screenshot</button>
         <button type="button" className="secondary-button" onClick={() => cameraInput.current?.click()}><Camera size={18} /> Take a photo</button>
       </div>
       <input ref={galleryInput} hidden type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" onChange={(event) => { const file = event.target.files?.[0]; if (file) void analyzeFile(file); }} />
       <input ref={cameraInput} hidden type="file" accept="image/*" capture="environment" onChange={(event) => { const file = event.target.files?.[0]; if (file) void analyzeFile(file); }} />
-      <p className="fitdays-privacy"><LockKeyhole size={14} /> Processed securely with OpenAI vision. Project 75 does not save the image, it is not used for model training, and it never changes your goals.</p>
+      <p className="fitdays-privacy"><LockKeyhole size={14} /> The screenshot is analyzed securely and is not stored.</p>
     </div> : null}
 
     {step === 'analyzing' ? <div className="fitdays-processing">
       <div className="fitdays-preview">{preview ? <img src={preview} alt="FitDays screenshot awaiting analysis" /> : null}<span><ScanLine size={26} /></span></div>
-      <div><LoaderCircle className="spin" size={28} /><p className="eyebrow">Vision AI in progress</p><h3>Analyzing your FitDays results…</h3><p>Reading Dutch or English labels, checking realistic ranges, and keeping anything unclear empty.</p><div className="analysis-steps"><span className="active">Secure upload</span><span className="active">Image understanding</span><span>Structured checks</span></div></div>
+      <div><LoaderCircle className="spin" size={28} /><h3>Analyzing screenshot</h3><p>Reading Dutch or English labels and checking that the values are within expected ranges.</p><div className="analysis-steps"><span className="active">Upload received</span><span className="active">Reading measurements</span><span>Checking values</span></div></div>
     </div> : null}
 
     {step === 'error' ? <div className="fitdays-error-state">
-      <span><AlertCircle size={26} /></span><div><h3>We need a clearer screenshot</h3><p>{error}</p><div><button type="button" className="primary-button" onClick={() => galleryInput.current?.click()}><RefreshCw size={17} /> Try another screenshot</button><button type="button" className="text-button" onClick={useManualEntry}><PencilLine size={16} /> Use manual weight entry</button></div></div>
+      <span><AlertCircle size={26} /></span><div><h3>Screenshot could not be read</h3><p>{error}</p><div><button type="button" className="primary-button" onClick={() => galleryInput.current?.click()}><RefreshCw size={17} /> Try another screenshot</button><button type="button" className="text-button" onClick={useManualEntry}><PencilLine size={16} /> Enter weight manually</button></div></div>
       <input ref={galleryInput} hidden type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" onChange={(event) => { const file = event.target.files?.[0]; if (file) void analyzeFile(file); }} />
     </div> : null}
 
     {step === 'review' && draft ? <div className="fitdays-review">
       <div className="fitdays-review-summary">
         <div className="fitdays-thumb">{preview ? <img src={preview} alt="Uploaded FitDays screenshot" /> : null}</div>
-        <div><p className="eyebrow">Ready for your review</p><h3>{importedCount} values found</h3><p>{fileName} · Nothing is saved until you confirm.</p></div>
-        <span className="fitdays-ai-badge"><ShieldCheck size={16} /> AI-extracted</span>
+        <div><h3>Review import</h3><p>{importedCount} values found in {fileName}. Nothing is saved until you confirm.</p></div>
+        <span className="fitdays-ai-badge"><ShieldCheck size={16} /> Extracted</span>
       </div>
 
       <div className="fitdays-date-review">
@@ -249,7 +249,7 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
         </div>
       </div>
       <div className="fitdays-timestamp">
-        <label><span>Fine-tune date & time</span><input type="datetime-local" value={inputTimestamp(draft.measuredAt)} onChange={(event) => { setDateChoice('screenshot'); updateTimestamp(event.target.value); }} /></label>
+        <label><span>Edit date and time</span><input type="datetime-local" value={inputTimestamp(draft.measuredAt)} onChange={(event) => { setDateChoice('screenshot'); updateTimestamp(event.target.value); }} /></label>
         {issuesByField.get('measuredAt')?.map((issue) => <small className={issue.code} key={issue.message}><AlertCircle size={13} /> {issue.message}</small>)}
       </div>
 
@@ -267,10 +267,10 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
       })}</div></section>)}</div> : null}
 
       {(draft.issues ?? []).some((issue) => issue.code === 'inconsistent') ? <div className="fitdays-consistency"><AlertCircle size={18} /><p><strong>A few values do not fully agree.</strong>The screenshot values are left unchanged so you can compare them yourself.</p></div> : null}
-      <div className="fitdays-save"><p><ShieldCheck size={16} /> Missing optional values can stay empty. FitDays classifications and “ideal weight” are never imported.</p><button type="button" className="primary-button" disabled={!draft.measuredAt} onClick={requestSave}><Check size={18} /> Everything looks right — save</button></div>
+      <div className="fitdays-save"><p><ShieldCheck size={16} /> Optional values can stay empty. FitDays classifications and “ideal weight” are not imported.</p><button type="button" className="primary-button" disabled={!draft.measuredAt} onClick={requestSave}><Check size={18} /> Save measurement</button></div>
     </div> : null}
 
-    {step === 'success' ? <div className="fitdays-success"><span><Check size={30} /></span><p className="eyebrow">Import complete</p><h3>FitDays measurement added</h3><p>{savedHistorical ? 'The reading was added to history. Your newer current weight stayed unchanged.' : 'Your current body summary, charts and measurement history are up to date.'}</p><button type="button" className="secondary-button" onClick={reset}><ImagePlus size={17} /> Import another screenshot</button></div> : null}
+    {step === 'success' ? <div className="fitdays-success"><span><Check size={30} /></span><h3>Measurement saved</h3><p>{savedHistorical ? 'The measurement was added to history. Your newer current weight was not changed.' : 'The body summary, charts and measurement history have been updated.'}</p><button type="button" className="secondary-button" onClick={reset}><ImagePlus size={17} /> Import another screenshot</button></div> : null}
 
     <Modal open={Boolean(duplicate)} onClose={() => setDuplicateId(null)} title="Possible duplicate measurement" subtitle="A saved entry has a similar time and weight." size="small">
       {duplicate ? <div className="duplicate-review"><p><strong>{formatMeasurementTimestamp(duplicate.measuredAt)}</strong><span>{duplicate.weightKg == null ? 'Weight not available' : `${duplicate.weightKg} kg`}</span></p><div><button type="button" className="primary-button" onClick={() => completeSave(duplicate.id)}>Replace existing entry</button><button type="button" className="secondary-button" onClick={() => completeSave()}>Keep both entries</button><button type="button" className="text-button" onClick={reset}>Cancel import</button></div></div> : null}
