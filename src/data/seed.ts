@@ -44,7 +44,7 @@ const demoSessions: WorkoutSession[] = [
 
 export function createSeedData(): AppData {
   return {
-    version: 5,
+    version: 6,
     profile: {
       name: 'Kenny', age: 29, sex: 'male', heightCm: 174, startWeightKg: 83.8, currentWeightKg: 82.6, goalWeightKg: 75,
       calorieTarget: 2100, proteinTarget: 170, carbTarget: 205, fatTarget: 67,
@@ -62,6 +62,7 @@ export function createSeedData(): AppData {
       { foodId: 'honey', servingId: 'teaspoon', quantity: 1 },
     ] }],
     weights: structuredClone(weights),
+    bodyMeasurements: [],
     program: structuredClone(defaultProgram),
     sessions: structuredClone(demoSessions),
     habits: [{ date: today, water: false, walk: false, sleep: true }],

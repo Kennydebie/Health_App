@@ -62,6 +62,70 @@ export interface WeightEntry {
   id: string;
   date: string;
   weightKg: number;
+  recordedAt?: string;
+  source?: 'manual' | 'fitdays_ai_image';
+  sourceMeasurementId?: string;
+}
+
+export type BodyMetricKey =
+  | 'weightKg'
+  | 'bmi'
+  | 'bodyFatPercent'
+  | 'fatMassKg'
+  | 'fatFreeMassKg'
+  | 'muscleMassKg'
+  | 'musclePercent'
+  | 'skeletalMusclePercent'
+  | 'boneMassKg'
+  | 'proteinMassKg'
+  | 'proteinPercent'
+  | 'bodyWaterKg'
+  | 'bodyWaterPercent'
+  | 'subcutaneousFatPercent'
+  | 'visceralFatIndex'
+  | 'bmrKcal'
+  | 'bodyAge';
+
+export interface BodyMeasurementValues {
+  timestamp: string | null;
+  weightKg: number | null;
+  bmi: number | null;
+  bodyFatPercent: number | null;
+  fatMassKg: number | null;
+  fatFreeMassKg: number | null;
+  muscleMassKg: number | null;
+  musclePercent: number | null;
+  skeletalMusclePercent: number | null;
+  boneMassKg: number | null;
+  proteinMassKg: number | null;
+  proteinPercent: number | null;
+  bodyWaterKg: number | null;
+  bodyWaterPercent: number | null;
+  subcutaneousFatPercent: number | null;
+  visceralFatIndex: number | null;
+  bmrKcal: number | null;
+  bodyAge: number | null;
+}
+
+export type BodyMeasurementConfidence = Record<'timestamp' | BodyMetricKey, number | null>;
+
+export interface MeasurementIssue {
+  code: 'missing' | 'low_confidence' | 'out_of_range' | 'inconsistent';
+  field?: 'timestamp' | BodyMetricKey;
+  relatedField?: BodyMetricKey;
+  message: string;
+  severity: 'notice' | 'warning';
+}
+
+export interface BodyMeasurementDraft extends BodyMeasurementValues {
+  source: 'fitdays_ai_image';
+  confidence: BodyMeasurementConfidence;
+  issues: MeasurementIssue[];
+}
+
+export interface BodyMeasurement extends BodyMeasurementDraft {
+  id: string;
+  createdAt: string;
 }
 
 export interface Exercise {
@@ -177,6 +241,7 @@ export interface AppData {
   recentFoodIds: string[];
   savedMeals: SavedMeal[];
   weights: WeightEntry[];
+  bodyMeasurements: BodyMeasurement[];
   program: WorkoutDay[];
   sessions: WorkoutSession[];
   habits: HabitEntry[];

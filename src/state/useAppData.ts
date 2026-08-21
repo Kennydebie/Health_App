@@ -5,7 +5,7 @@ import { foodMap } from '../data/foods';
 import { addMacros, entryMacros } from '../lib/nutrition';
 import { uid } from '../lib/id';
 import { buildProgramTemplate } from '../lib/workout';
-import type { AppData, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, ProgressionPlan, SquatProgressionLevel, TrainingTemplate, UserProfile, WeightEntry, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
+import type { AppData, BodyMeasurement, BodyMeasurementDraft, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, ProgressionPlan, SquatProgressionLevel, TrainingTemplate, UserProfile, WeightEntry, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 const STORAGE_KEY = 'cut-forward-data-v1';
 
@@ -35,7 +35,7 @@ export function inferWorkoutId(
 }
 
 export function migrateAppData(saved: AppData): AppData {
-  const legacy = saved as AppData & Partial<Pick<AppData, 'cardioLog' | 'weeklyCardioTarget' | 'squatProgression' | 'progressionPlans'>>;
+  const legacy = saved as AppData & Partial<Pick<AppData, 'bodyMeasurements' | 'cardioLog' | 'weeklyCardioTarget' | 'squatProgression' | 'progressionPlans'>>;
   const needsProgramUpgrade = saved.version < 4 || saved.program.length !== 7;
   const base: AppData = {
     ...saved,
@@ -46,6 +46,7 @@ export function migrateAppData(saved: AppData): AppData {
       trainingTemplate: saved.profile.trainingTemplate ?? 'four-day-upper-lower',
     },
     program: needsProgramUpgrade ? structuredClone(defaultProgram) : saved.program,
+    bodyMeasurements: legacy.bodyMeasurements ?? [],
     cardioLog: legacy.cardioLog ?? [],
     weeklyCardioTarget: legacy.weeklyCardioTarget ?? 105,
     squatProgression: legacy.squatProgression ?? { currentLevel: 'assisted-squat', stableSessions: 0, updatedAt: new Date().toISOString() },
@@ -61,7 +62,7 @@ export function migrateAppData(saved: AppData): AppData {
       ?? programByDay.get(legacySession.dayId)?.workoutId;
     return { ...session, workoutId: workoutId ?? `legacy_${legacySession.dayId}` };
   });
-  return { ...base, version: 5, program, sessions };
+  return { ...base, version: 6, program, sessions };
 }
 
 function loadData(): AppData {
@@ -121,11 +122,36 @@ export function useAppData() {
   }), [update]);
 
   const saveWeight = useCallback((date: string, weightKg: number) => update((current) => {
-    const existing = current.weights.find((item) => item.date === date);
+    const existing = current.weights.find((item) => item.date === date && item.source !== 'fitdays_ai_image');
     const weights: WeightEntry[] = existing
-      ? current.weights.map((item) => item.date === date ? { ...item, weightKg } : item)
-      : [...current.weights, { id: uid('weight'), date, weightKg }];
+      ? current.weights.map((item) => item.id === existing.id ? { ...item, weightKg } : item)
+      : [...current.weights, { id: uid('weight'), date, weightKg, recordedAt: `${date}T12:00:00`, source: 'manual' }];
     return { ...current, weights, profile: { ...current.profile, currentWeightKg: weightKg } };
+  }), [update]);
+
+  const saveBodyMeasurement = useCallback((draft: BodyMeasurementDraft, replaceId?: string) => update((current) => {
+    const id = replaceId ?? uid('measurement');
+    const measurement: BodyMeasurement = { ...draft, id, createdAt: new Date().toISOString() };
+    const bodyMeasurements = replaceId
+      ? current.bodyMeasurements.map((item) => item.id === replaceId ? measurement : item)
+      : [...current.bodyMeasurements, measurement];
+    const withoutReplacedWeight = replaceId ? current.weights.filter((item) => item.sourceMeasurementId !== replaceId) : current.weights;
+    const importedWeight: WeightEntry[] = draft.timestamp && draft.weightKg != null ? [{
+      id: uid('weight'),
+      date: draft.timestamp.slice(0, 10),
+      recordedAt: draft.timestamp,
+      weightKg: draft.weightKg,
+      source: 'fitdays_ai_image',
+      sourceMeasurementId: id,
+    }] : [];
+    const weights = [...withoutReplacedWeight, ...importedWeight];
+    const latestWeight = [...weights].sort((a, b) => (a.recordedAt ?? a.date).localeCompare(b.recordedAt ?? b.date)).at(-1)?.weightKg;
+    return {
+      ...current,
+      bodyMeasurements,
+      weights,
+      profile: latestWeight == null ? current.profile : { ...current.profile, currentWeightKg: latestWeight },
+    };
   }), [update]);
 
   const updateProfile = useCallback((profile: UserProfile) => update((current) => ({ ...current, profile })), [update]);
@@ -215,9 +241,9 @@ export function useAppData() {
 
   return useMemo(() => ({
     data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal,
-    saveWeight, updateProfile, updateProgramDay, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
+    saveWeight, saveBodyMeasurement, updateProfile, updateProgramDay, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
     startWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate,
-  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveWeight, updateProfile, updateProgramDay, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
+  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveWeight, saveBodyMeasurement, updateProfile, updateProgramDay, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
 }
 
 export type AppController = ReturnType<typeof useAppData>;
