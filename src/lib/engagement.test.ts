@@ -15,7 +15,8 @@ describe('engagement helpers', () => {
 
   it('derives plan week, streak and consistency from stored records', () => {
     const data = createSeedData();
-    expect(activePlanWeek(data.weights, data.weights.at(-1)!.date)).toBeGreaterThan(1);
+    const lastDemoDate = data.measurements.at(-1)!.measuredAt!.slice(0, 10);
+    expect(activePlanWeek(data.measurements, lastDemoDate)).toBe(1);
     expect(trainingWeekStreak(data.sessions, data.sessions.at(-1)!.date)).toBeGreaterThan(0);
     const consistency = weeklyConsistency(data, data.sessions.at(-1)!.date);
     expect(consistency.percent).toBeGreaterThanOrEqual(0);

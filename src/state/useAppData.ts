@@ -5,7 +5,8 @@ import { foodMap } from '../data/foods';
 import { addMacros, entryMacros } from '../lib/nutrition';
 import { uid } from '../lib/id';
 import { buildProgramTemplate } from '../lib/workout';
-import type { AppData, BodyMeasurement, BodyMeasurementDraft, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, ProgressionPlan, SquatProgressionLevel, TrainingTemplate, UserProfile, WeightEntry, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
+import { DEFAULT_BODY_GOALS, withDetectedOutliers } from '../lib/bodyMeasurements';
+import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementConfidence, BodyMeasurementDraft, BodyMetricKey, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, ProgressionPlan, SquatProgressionLevel, TrainingTemplate, UserProfile, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 const STORAGE_KEY = 'cut-forward-data-v1';
 
@@ -34,19 +35,92 @@ export function inferWorkoutId(
   return undefined;
 }
 
-export function migrateAppData(saved: AppData): AppData {
-  const legacy = saved as AppData & Partial<Pick<AppData, 'bodyMeasurements' | 'cardioLog' | 'weeklyCardioTarget' | 'squatProgression' | 'progressionPlans'>>;
-  const needsProgramUpgrade = saved.version < 4 || saved.program.length !== 7;
+interface LegacyWeightEntry {
+  id: string;
+  date: string;
+  weightKg: number;
+  recordedAt?: string;
+  source?: 'manual' | 'fitdays_ai_image';
+  sourceMeasurementId?: string;
+}
+
+type LegacyMeasurement = Partial<BodyMeasurement> & {
+  timestamp?: string | null;
+  bodyWaterKg?: number | null;
+  confidence?: BodyMeasurementConfidence & { timestamp?: number | null };
+};
+
+type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals'> & {
+  profile: UserProfile & { startWeightKg?: number; currentWeightKg?: number };
+  measurements?: LegacyMeasurement[];
+  bodyMeasurements?: LegacyMeasurement[];
+  weights?: LegacyWeightEntry[];
+  bodyGoals?: Partial<BodyGoalSettings>;
+};
+
+const emptyMeasurementValues = {
+  weightKg: null, bmi: null, bodyFatPercent: null, fatMassKg: null, fatFreeMassKg: null,
+  muscleMassKg: null, musclePercent: null, skeletalMusclePercent: null, boneMassKg: null,
+  proteinMassKg: null, proteinPercent: null, waterMassKg: null, bodyWaterPercent: null,
+  subcutaneousFatPercent: null, visceralFatIndex: null, bmrKcal: null, bodyAge: null,
+  waistCircumferenceCm: null,
+};
+
+function canonicalMeasurement(measurement: LegacyMeasurement): BodyMeasurement {
+  const legacyConfidence = measurement.confidence;
+  const confidence = legacyConfidence ? { ...legacyConfidence, measuredAt: legacyConfidence.measuredAt ?? legacyConfidence.timestamp ?? null } : undefined;
+  if (confidence && 'timestamp' in confidence) delete (confidence as { timestamp?: number | null }).timestamp;
+  const { timestamp, bodyWaterKg, ...canonical } = measurement;
+  return {
+    ...emptyMeasurementValues,
+    ...canonical,
+    id: measurement.id ?? uid('measurement'),
+    measuredAt: measurement.measuredAt ?? timestamp ?? null,
+    waterMassKg: measurement.waterMassKg ?? bodyWaterKg ?? null,
+    source: measurement.source ?? 'fitdays_ai_image',
+    createdAt: measurement.createdAt ?? new Date().toISOString(),
+    ...(confidence ? { confidence } : {}),
+  };
+}
+
+export function migrateAppData(saved: AppData | LegacyAppData): AppData {
+  const legacy = saved as LegacyAppData;
+  const needsProgramUpgrade = legacy.version < 4 || legacy.program.length !== 7;
+  const profile = { ...legacy.profile };
+  delete profile.startWeightKg;
+  delete profile.currentWeightKg;
+  const importedMeasurements = [...(legacy.measurements ?? legacy.bodyMeasurements ?? [])].map(canonicalMeasurement);
+  const representedWeightIds = new Set(importedMeasurements.map((measurement) => measurement.id));
+  const legacyWeights = (legacy.weights ?? []).flatMap((weight): BodyMeasurement[] => {
+    if (weight.sourceMeasurementId && representedWeightIds.has(weight.sourceMeasurementId)) return [];
+    return [{
+      ...emptyMeasurementValues,
+      id: weight.id,
+      measuredAt: weight.recordedAt ?? `${weight.date}T12:00:00`,
+      weightKg: weight.weightKg,
+      source: weight.source ?? 'manual',
+      createdAt: weight.recordedAt ?? `${weight.date}T12:00:00`,
+      isDemo: weight.id.startsWith('demo_weight_'),
+    }];
+  });
+  const combinedMeasurements = [...importedMeasurements, ...legacyWeights];
+  const measurements = withDetectedOutliers(combinedMeasurements.some((measurement) => !measurement.isDemo)
+    ? combinedMeasurements.filter((measurement) => !measurement.isDemo)
+    : combinedMeasurements);
+  const withoutLegacyCollections = { ...legacy };
+  delete withoutLegacyCollections.weights;
+  delete withoutLegacyCollections.bodyMeasurements;
   const base: AppData = {
-    ...saved,
+    ...withoutLegacyCollections,
     profile: {
-      ...saved.profile,
-      trainingDays: saved.profile.trainingDays ?? ['Monday', 'Tuesday', 'Thursday', 'Saturday'],
-      balanceLevel: saved.profile.balanceLevel ?? 'beginner',
-      trainingTemplate: saved.profile.trainingTemplate ?? 'four-day-upper-lower',
+      ...profile,
+      trainingDays: profile.trainingDays ?? ['Monday', 'Tuesday', 'Thursday', 'Saturday'],
+      balanceLevel: profile.balanceLevel ?? 'beginner',
+      trainingTemplate: profile.trainingTemplate ?? 'four-day-upper-lower',
     },
-    program: needsProgramUpgrade ? structuredClone(defaultProgram) : saved.program,
-    bodyMeasurements: legacy.bodyMeasurements ?? [],
+    program: needsProgramUpgrade ? structuredClone(defaultProgram) : legacy.program,
+    measurements,
+    bodyGoals: { ...DEFAULT_BODY_GOALS, ...legacy.bodyGoals, version: 1 },
     cardioLog: legacy.cardioLog ?? [],
     weeklyCardioTarget: legacy.weeklyCardioTarget ?? 105,
     squatProgression: legacy.squatProgression ?? { currentLevel: 'assisted-squat', stableSessions: 0, updatedAt: new Date().toISOString() },
@@ -62,13 +136,13 @@ export function migrateAppData(saved: AppData): AppData {
       ?? programByDay.get(legacySession.dayId)?.workoutId;
     return { ...session, workoutId: workoutId ?? `legacy_${legacySession.dayId}` };
   });
-  return { ...base, version: 6, program, sessions };
+  return { ...base, version: 7, program, sessions };
 }
 
 function loadData(): AppData {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return migrateAppData(JSON.parse(saved) as AppData);
+    if (saved) return migrateAppData(JSON.parse(saved) as AppData | LegacyAppData);
   } catch {
     // Fall through to safe seed data if storage is corrupted or unavailable.
   }
@@ -121,38 +195,53 @@ export function useAppData() {
     return { ...current, foodLog: [...current.foodLog, ...entries] };
   }), [update]);
 
-  const saveWeight = useCallback((date: string, weightKg: number) => update((current) => {
-    const existing = current.weights.find((item) => item.date === date && item.source !== 'fitdays_ai_image');
-    const weights: WeightEntry[] = existing
-      ? current.weights.map((item) => item.id === existing.id ? { ...item, weightKg } : item)
-      : [...current.weights, { id: uid('weight'), date, weightKg, recordedAt: `${date}T12:00:00`, source: 'manual' }];
-    return { ...current, weights, profile: { ...current.profile, currentWeightKg: weightKg } };
+  const saveWeight = useCallback((date: string, weightKg: number, waistCircumferenceCm: number | null = null) => update((current) => {
+    const withoutDemo = current.measurements.filter((item) => !item.isDemo);
+    const existing = withoutDemo.find((item) => item.measuredAt?.slice(0, 10) === date && item.source === 'manual');
+    const measurement: BodyMeasurement = {
+      ...emptyMeasurementValues,
+      ...(existing ?? {}),
+      id: existing?.id ?? uid('measurement'),
+      measuredAt: existing?.measuredAt ?? `${date}T12:00:00`,
+      weightKg,
+      waistCircumferenceCm,
+      source: 'manual',
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+    };
+    const measurements = existing
+      ? withoutDemo.map((item) => item.id === existing.id ? measurement : item)
+      : [...withoutDemo, measurement];
+    return { ...current, measurements: withDetectedOutliers(measurements) };
   }), [update]);
 
   const saveBodyMeasurement = useCallback((draft: BodyMeasurementDraft, replaceId?: string) => update((current) => {
     const id = replaceId ?? uid('measurement');
     const measurement: BodyMeasurement = { ...draft, id, createdAt: new Date().toISOString() };
-    const bodyMeasurements = replaceId
-      ? current.bodyMeasurements.map((item) => item.id === replaceId ? measurement : item)
-      : [...current.bodyMeasurements, measurement];
-    const withoutReplacedWeight = replaceId ? current.weights.filter((item) => item.sourceMeasurementId !== replaceId) : current.weights;
-    const importedWeight: WeightEntry[] = draft.timestamp && draft.weightKg != null ? [{
-      id: uid('weight'),
-      date: draft.timestamp.slice(0, 10),
-      recordedAt: draft.timestamp,
-      weightKg: draft.weightKg,
-      source: 'fitdays_ai_image',
-      sourceMeasurementId: id,
-    }] : [];
-    const weights = [...withoutReplacedWeight, ...importedWeight];
-    const latestWeight = [...weights].sort((a, b) => (a.recordedAt ?? a.date).localeCompare(b.recordedAt ?? b.date)).at(-1)?.weightKg;
+    const genuine = current.measurements.filter((item) => !item.isDemo);
+    const measurements = replaceId
+      ? genuine.map((item) => item.id === replaceId ? measurement : item)
+      : [...genuine, measurement];
     return {
       ...current,
-      bodyMeasurements,
-      weights,
-      profile: latestWeight == null ? current.profile : { ...current.profile, currentWeightKg: latestWeight },
+      measurements: withDetectedOutliers(measurements),
+      bodyGoals: {
+        ...current.bodyGoals,
+        fatFreeMassTargetKg: current.bodyGoals.fatFreeMassTargetKg ?? draft.fatFreeMassKg,
+        muscleMassTargetKg: current.bodyGoals.muscleMassTargetKg ?? draft.muscleMassKg,
+      },
     };
   }), [update]);
+
+  const updateBodyGoals = useCallback((bodyGoals: BodyGoalSettings) => update((current) => ({ ...current, bodyGoals })), [update]);
+
+  const confirmMeasurementMetric = useCallback((measurementId: string, metric: BodyMetricKey) => update((current) => ({
+    ...current,
+    measurements: current.measurements.map((measurement) => measurement.id !== measurementId ? measurement : {
+      ...measurement,
+      excludedFromTrend: (measurement.excludedFromTrend ?? []).filter((item) => item !== metric),
+      confirmedOutlierMetrics: [...new Set([...(measurement.confirmedOutlierMetrics ?? []), metric])],
+    }),
+  })), [update]);
 
   const updateProfile = useCallback((profile: UserProfile) => update((current) => ({ ...current, profile })), [update]);
 
@@ -241,9 +330,9 @@ export function useAppData() {
 
   return useMemo(() => ({
     data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal,
-    saveWeight, saveBodyMeasurement, updateProfile, updateProgramDay, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
+    saveWeight, saveBodyMeasurement, updateBodyGoals, confirmMeasurementMetric, updateProfile, updateProgramDay, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
     startWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate,
-  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveWeight, saveBodyMeasurement, updateProfile, updateProgramDay, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
+  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveWeight, saveBodyMeasurement, updateBodyGoals, confirmMeasurementMetric, updateProfile, updateProgramDay, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
 }
 
 export type AppController = ReturnType<typeof useAppData>;

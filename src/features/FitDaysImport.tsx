@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Camera, Check, ChevronDown, ImagePlus, LoaderCircle, LockKeyhole, PencilLine, RefreshCw, ScanLine, ShieldCheck, Sparkles, UploadCloud, X } from 'lucide-react';
 import { Modal } from '../components/Modal';
-import { FITDAYS_FIELDS, findSimilarBodyMeasurement, formatMeasurementTimestamp, parseMeasurementNumber, validateFitDaysMeasurement } from '../lib/fitdays';
+import { EMPTY_BODY_MEASUREMENT_CONFIDENCE, FITDAYS_FIELDS, findSimilarBodyMeasurement, formatMeasurementTimestamp, parseMeasurementNumber, validateFitDaysMeasurement } from '../lib/fitdays';
+import { formatMeasurementDate, latestMeasurement } from '../lib/bodyMeasurements';
 import type { AppController } from '../state/useAppData';
 import type { BodyMeasurementDraft, BodyMetricKey } from '../types/models';
 
@@ -68,6 +69,9 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
   const [error, setError] = useState('');
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(true);
+  const [detectedDate, setDetectedDate] = useState<string | null>(null);
+  const [dateChoice, setDateChoice] = useState<'screenshot' | 'today'>('screenshot');
+  const [savedHistorical, setSavedHistorical] = useState(false);
 
   const clearPreview = () => {
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
@@ -86,6 +90,9 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
     setError('');
     setFileName('');
     setDuplicateId(null);
+    setDetectedDate(null);
+    setDateChoice('screenshot');
+    setSavedHistorical(false);
     if (galleryInput.current) galleryInput.current.value = '';
     if (cameraInput.current) cameraInput.current.value = '';
   };
@@ -127,6 +134,8 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
       const result = await response.json().catch(() => ({})) as { measurement?: BodyMeasurementDraft; code?: string };
       if (!response.ok || !result.measurement) throw Object.assign(new Error(), { status: response.status, code: result.code });
       setDraft(result.measurement);
+      setDetectedDate(result.measurement.measuredAt);
+      setDateChoice('screenshot');
       setStep('review');
     } catch (caught) {
       const failure = caught as { status?: number; code?: string; message?: string };
@@ -147,17 +156,24 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
   const updateMetric = (key: BodyMetricKey, raw: string) => setDraft((current) => {
     if (!current) return current;
     const next = { ...current, [key]: parseMeasurementNumber(raw) };
-    return { ...next, issues: validateFitDaysMeasurement(next, next.confidence) };
+    return { ...next, issues: validateFitDaysMeasurement(next, next.confidence ?? EMPTY_BODY_MEASUREMENT_CONFIDENCE) };
   });
 
   const updateTimestamp = (raw: string) => setDraft((current) => {
     if (!current) return current;
-    const next = { ...current, timestamp: raw ? new Date(raw).toISOString() : null };
-    return { ...next, issues: validateFitDaysMeasurement(next, next.confidence) };
+    const next = { ...current, measuredAt: raw ? new Date(raw).toISOString() : null };
+    return { ...next, issues: validateFitDaysMeasurement(next, next.confidence ?? EMPTY_BODY_MEASUREMENT_CONFIDENCE) };
   });
+
+  const chooseDate = (choice: 'screenshot' | 'today') => {
+    setDateChoice(choice);
+    updateTimestamp(choice === 'today' ? new Date().toISOString() : detectedDate ?? '');
+  };
 
   const completeSave = (replaceId?: string) => {
     if (!draft) return;
+    const latestBeforeSave = latestMeasurement(data.measurements);
+    setSavedHistorical(Boolean(draft.measuredAt && latestBeforeSave?.measuredAt && draft.measuredAt < latestBeforeSave.measuredAt));
     saveBodyMeasurement(draft, replaceId);
     clearPreview();
     setDuplicateId(null);
@@ -168,7 +184,7 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
 
   const requestSave = () => {
     if (!draft) return;
-    const duplicate = findSimilarBodyMeasurement(data.bodyMeasurements, draft);
+    const duplicate = findSimilarBodyMeasurement(data.measurements, draft);
     if (duplicate) setDuplicateId(duplicate.id);
     else completeSave();
   };
@@ -178,8 +194,11 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
     window.requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.weight-entry input[type="number"]')?.focus());
   };
 
-  const duplicate = data.bodyMeasurements.find((measurement) => measurement.id === duplicateId);
-  const importedCount = FITDAYS_FIELDS.filter((field) => draft?.[field.key] != null).length + Number(Boolean(draft?.timestamp));
+  const duplicate = data.measurements.find((measurement) => measurement.id === duplicateId);
+  const importedCount = FITDAYS_FIELDS.filter((field) => draft?.[field.key] != null).length + Number(Boolean(draft?.measuredAt));
+  const confidence = draft?.confidence ?? EMPTY_BODY_MEASUREMENT_CONFIDENCE;
+  const latest = latestMeasurement(data.measurements);
+  const historical = Boolean(draft?.measuredAt && latest?.measuredAt && draft.measuredAt < latest.measuredAt && duplicate?.id !== latest.id);
 
   return <section className={`fitdays-module card fitdays-${step}`} aria-labelledby="fitdays-title">
     <div className="fitdays-heading">
@@ -222,30 +241,39 @@ export function FitDaysImport({ controller }: FitDaysImportProps) {
         <span className="fitdays-ai-badge"><ShieldCheck size={16} /> AI-extracted</span>
       </div>
 
-      <div className="fitdays-timestamp">
-        <label><span>Measurement date & time<em>{draft.confidence.timestamp == null ? 'Not read' : `${Math.round(draft.confidence.timestamp * 100)}% sure`}</em></span><input type="datetime-local" value={inputTimestamp(draft.timestamp)} onChange={(event) => updateTimestamp(event.target.value)} /></label>
-        {issuesByField.get('timestamp')?.map((issue) => <small className={issue.code} key={issue.message}><AlertCircle size={13} /> {issue.message}</small>)}
+      <div className="fitdays-date-review">
+        <div><p className="eyebrow">Measurement date</p><strong>{formatMeasurementDate(draft.measuredAt)}</strong><span>{confidence.measuredAt == null ? 'Please verify the date' : `${Math.round(confidence.measuredAt * 100)}% extraction confidence`}</span></div>
+        <div className="fitdays-date-choices" role="group" aria-label="Choose measurement date source">
+          <button type="button" className={dateChoice === 'screenshot' ? 'active' : ''} disabled={!detectedDate} onClick={() => chooseDate('screenshot')}><Check size={15} /> Keep screenshot date</button>
+          <button type="button" className={dateChoice === 'today' ? 'active' : ''} onClick={() => chooseDate('today')}>Use today as measurement date</button>
+        </div>
       </div>
+      <div className="fitdays-timestamp">
+        <label><span>Fine-tune date & time</span><input type="datetime-local" value={inputTimestamp(draft.measuredAt)} onChange={(event) => { setDateChoice('screenshot'); updateTimestamp(event.target.value); }} /></label>
+        {issuesByField.get('measuredAt')?.map((issue) => <small className={issue.code} key={issue.message}><AlertCircle size={13} /> {issue.message}</small>)}
+      </div>
+
+      {historical ? <div className="fitdays-historical-note"><AlertCircle size={18} /><p><strong>This is a historical measurement.</strong>This measurement is from {formatMeasurementDate(draft.measuredAt, false)}. It will be added to your history but will not replace your current weight.</p></div> : null}
 
       <button type="button" className="fitdays-detail-toggle" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}><span><strong>Extracted measurements</strong><small>Edit any value inline before saving</small></span><ChevronDown size={18} /></button>
       {detailsOpen ? <div className="fitdays-fields">{(['Core', 'Composition', 'Hydration', 'Metabolism'] as const).map((group) => <section key={group}><h4>{group}</h4><div>{FITDAYS_FIELDS.filter((field) => field.group === group).map((field) => {
         const fieldIssues = issuesByField.get(field.key) ?? [];
-        const confidence = draft.confidence[field.key];
+        const fieldConfidence = confidence[field.key];
         return <label className={fieldIssues.length ? `has-issue ${fieldIssues.some((issue) => issue.severity === 'warning') ? 'warning' : 'missing'}` : ''} key={field.key}>
-          <span>{field.label}<em>{confidence == null ? 'Not read' : confidence < .75 ? 'Check' : `${Math.round(confidence * 100)}% sure`}</em></span>
+          <span>{field.label}<em>{fieldConfidence == null ? 'Not read' : fieldConfidence < .75 ? 'Check' : `${Math.round(fieldConfidence * 100)}% sure`}</em></span>
           <div><input type="number" inputMode="decimal" step={field.step} min={field.min} max={field.max} value={draft[field.key] ?? ''} placeholder="—" onChange={(event) => updateMetric(field.key, event.target.value)} /><i>{field.unit}</i></div>
           {fieldIssues[0] ? <small><AlertCircle size={12} /> {fieldIssues[0].message}</small> : null}
         </label>;
       })}</div></section>)}</div> : null}
 
-      {draft.issues.some((issue) => issue.code === 'inconsistent') ? <div className="fitdays-consistency"><AlertCircle size={18} /><p><strong>A few values do not fully agree.</strong>The screenshot values are left unchanged so you can compare them yourself.</p></div> : null}
-      <div className="fitdays-save"><p><ShieldCheck size={16} /> Missing optional values can stay empty. FitDays classifications and “ideal weight” are never imported.</p><button type="button" className="primary-button" onClick={requestSave}><Check size={18} /> Everything looks right — save</button></div>
+      {(draft.issues ?? []).some((issue) => issue.code === 'inconsistent') ? <div className="fitdays-consistency"><AlertCircle size={18} /><p><strong>A few values do not fully agree.</strong>The screenshot values are left unchanged so you can compare them yourself.</p></div> : null}
+      <div className="fitdays-save"><p><ShieldCheck size={16} /> Missing optional values can stay empty. FitDays classifications and “ideal weight” are never imported.</p><button type="button" className="primary-button" disabled={!draft.measuredAt} onClick={requestSave}><Check size={18} /> Everything looks right — save</button></div>
     </div> : null}
 
-    {step === 'success' ? <div className="fitdays-success"><span><Check size={30} /></span><p className="eyebrow">Import complete</p><h3>FitDays measurement added</h3><p>Your body chart and measurement history are up to date.</p><button type="button" className="secondary-button" onClick={reset}><ImagePlus size={17} /> Import another screenshot</button></div> : null}
+    {step === 'success' ? <div className="fitdays-success"><span><Check size={30} /></span><p className="eyebrow">Import complete</p><h3>FitDays measurement added</h3><p>{savedHistorical ? 'The reading was added to history. Your newer current weight stayed unchanged.' : 'Your current body summary, charts and measurement history are up to date.'}</p><button type="button" className="secondary-button" onClick={reset}><ImagePlus size={17} /> Import another screenshot</button></div> : null}
 
     <Modal open={Boolean(duplicate)} onClose={() => setDuplicateId(null)} title="Possible duplicate measurement" subtitle="A saved entry has a similar time and weight.">
-      {duplicate ? <div className="duplicate-review"><p><strong>{formatMeasurementTimestamp(duplicate.timestamp)}</strong><span>{duplicate.weightKg == null ? 'Weight not available' : `${duplicate.weightKg} kg`}</span></p><div><button type="button" className="primary-button" onClick={() => completeSave(duplicate.id)}>Replace existing entry</button><button type="button" className="secondary-button" onClick={() => completeSave()}>Keep both entries</button><button type="button" className="text-button" onClick={reset}>Cancel import</button></div></div> : null}
+      {duplicate ? <div className="duplicate-review"><p><strong>{formatMeasurementTimestamp(duplicate.measuredAt)}</strong><span>{duplicate.weightKg == null ? 'Weight not available' : `${duplicate.weightKg} kg`}</span></p><div><button type="button" className="primary-button" onClick={() => completeSave(duplicate.id)}>Replace existing entry</button><button type="button" className="secondary-button" onClick={() => completeSave()}>Keep both entries</button><button type="button" className="text-button" onClick={reset}>Cancel import</button></div></div> : null}
     </Modal>
   </section>;
 }

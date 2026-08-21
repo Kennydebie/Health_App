@@ -7,7 +7,8 @@ import type { Page } from '../components/AppShell';
 import { exerciseMap } from '../data/exercises';
 import { prettyDate, toDateKey } from '../lib/date';
 import { activePlanWeek, dailyScore, displayWorkoutTitle, getWeekSnapshot, weeklyConsistency } from '../lib/engagement';
-import { average, weightTrend } from '../lib/progress';
+import { weightTrend } from '../lib/progress';
+import { rollingWeightSeries } from '../lib/bodyMeasurements';
 import type { AppController } from '../state/useAppData';
 import type { WorkoutDay } from '../types/models';
 
@@ -28,7 +29,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
   const today = toDateKey();
   const totals = totalsForDate(today);
   const profile = data.profile;
-  const trend = weightTrend(data.weights);
+  const trend = weightTrend(data.measurements);
   const todayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()).toLowerCase();
   const workoutDay = data.program.find((day) => day.id === todayName) ?? data.program[0];
   const activeSession = [...data.sessions].reverse().find((session) => !session.completedAt);
@@ -40,7 +41,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
   const caloriesRemaining = profile.calorieTarget - totals.calories;
   const proteinRemaining = profile.proteinTarget - totals.protein;
   const consistency = weeklyConsistency(data, today);
-  const week = activePlanWeek(data.weights, today);
+  const week = activePlanWeek(data.measurements, today);
   const score = dailyScore(data, today, totals);
 
   const weekItems: WeekStripItem[] = weekSnapshot.days.map((item) => {
@@ -60,9 +61,8 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
   });
 
   const weightChart = useMemo(() => {
-    const sorted = [...data.weights].sort((a, b) => a.date.localeCompare(b.date)).slice(-14);
-    return sorted.map((entry, index) => ({ date: entry.date.slice(5), average: average(sorted.slice(Math.max(0, index - 6), index + 1).map((item) => item.weightKg)) }));
-  }, [data.weights]);
+    return rollingWeightSeries(data.measurements).slice(-14).map((entry) => ({ date: entry.date.slice(5), average: entry.average }));
+  }, [data.measurements]);
 
   const action = activeSession
     ? { label: 'Continue workout', Icon: Play, run: () => setPage('workout') }

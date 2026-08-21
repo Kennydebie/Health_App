@@ -22,7 +22,7 @@ export const FITDAYS_FIELDS: FitDaysFieldDefinition[] = [
   { key: 'boneMassKg', label: 'Bone mass', unit: 'kg', group: 'Composition', min: .2, max: 20, step: '0.01' },
   { key: 'proteinMassKg', label: 'Protein mass', unit: 'kg', group: 'Composition', min: .1, max: 60, step: '0.01' },
   { key: 'proteinPercent', label: 'Protein', unit: '%', group: 'Composition', min: 0, max: 100, step: '0.01' },
-  { key: 'bodyWaterKg', label: 'Total body water', unit: 'kg', group: 'Hydration', min: 2, max: 250, step: '0.01' },
+  { key: 'waterMassKg', label: 'Total body water', unit: 'kg', group: 'Hydration', min: 2, max: 250, step: '0.01' },
   { key: 'bodyWaterPercent', label: 'Body water', unit: '%', group: 'Hydration', min: 0, max: 100, step: '0.01' },
   { key: 'subcutaneousFatPercent', label: 'Subcutaneous fat', unit: '%', group: 'Hydration', min: 0, max: 100, step: '0.01' },
   { key: 'visceralFatIndex', label: 'Visceral fat index', unit: '', group: 'Metabolism', min: 0, max: 60, step: '0.01' },
@@ -31,7 +31,7 @@ export const FITDAYS_FIELDS: FitDaysFieldDefinition[] = [
 ];
 
 export const EMPTY_BODY_MEASUREMENT_VALUES: BodyMeasurementValues = {
-  timestamp: null,
+  measuredAt: null,
   weightKg: null,
   bmi: null,
   bodyFatPercent: null,
@@ -43,16 +43,17 @@ export const EMPTY_BODY_MEASUREMENT_VALUES: BodyMeasurementValues = {
   boneMassKg: null,
   proteinMassKg: null,
   proteinPercent: null,
-  bodyWaterKg: null,
+  waterMassKg: null,
   bodyWaterPercent: null,
   subcutaneousFatPercent: null,
   visceralFatIndex: null,
   bmrKcal: null,
   bodyAge: null,
+  waistCircumferenceCm: null,
 };
 
 export const EMPTY_BODY_MEASUREMENT_CONFIDENCE: BodyMeasurementConfidence = {
-  timestamp: null,
+  measuredAt: null,
   weightKg: null,
   bmi: null,
   bodyFatPercent: null,
@@ -64,12 +65,13 @@ export const EMPTY_BODY_MEASUREMENT_CONFIDENCE: BodyMeasurementConfidence = {
   boneMassKg: null,
   proteinMassKg: null,
   proteinPercent: null,
-  bodyWaterKg: null,
+  waterMassKg: null,
   bodyWaterPercent: null,
   subcutaneousFatPercent: null,
   visceralFatIndex: null,
   bmrKcal: null,
   bodyAge: null,
+  waistCircumferenceCm: null,
 };
 
 export function parseMeasurementNumber(value: unknown): number | null {
@@ -103,9 +105,9 @@ function near(actual: number, expected: number, absoluteTolerance: number, propo
 export function validateFitDaysMeasurement(values: BodyMeasurementValues, confidence: BodyMeasurementConfidence): MeasurementIssue[] {
   const issues: MeasurementIssue[] = [];
 
-  if (!values.timestamp) issues.push({ code: 'missing', field: 'timestamp', message: 'Measurement date and time could not be read.', severity: 'notice' });
-  else if (!normalizeTimestamp(values.timestamp)) issues.push({ code: 'out_of_range', field: 'timestamp', message: 'Measurement date and time is not valid.', severity: 'warning' });
-  else if (confidence.timestamp != null && confidence.timestamp < .75) issues.push({ code: 'low_confidence', field: 'timestamp', message: 'Check the measurement date and time.', severity: 'warning' });
+  if (!values.measuredAt) issues.push({ code: 'missing', field: 'measuredAt', message: 'Measurement date and time could not be read.', severity: 'notice' });
+  else if (!normalizeTimestamp(values.measuredAt)) issues.push({ code: 'out_of_range', field: 'measuredAt', message: 'Measurement date and time is not valid.', severity: 'warning' });
+  else if (confidence.measuredAt != null && confidence.measuredAt < .75) issues.push({ code: 'low_confidence', field: 'measuredAt', message: 'Check the measurement date and time.', severity: 'warning' });
 
   for (const field of FITDAYS_FIELDS) {
     const value = values[field.key];
@@ -121,15 +123,15 @@ export function validateFitDaysMeasurement(values: BodyMeasurementValues, confid
     }
   }
 
-  const { weightKg, bodyFatPercent, fatMassKg, fatFreeMassKg, bodyWaterKg, bodyWaterPercent, muscleMassKg, musclePercent } = values;
+  const { weightKg, bodyFatPercent, fatMassKg, fatFreeMassKg, waterMassKg, bodyWaterPercent, muscleMassKg, musclePercent } = values;
   if (weightKg != null && bodyFatPercent != null && fatMassKg != null && !near(fatMassKg, weightKg * bodyFatPercent / 100, 1)) {
     issues.push({ code: 'inconsistent', field: 'fatMassKg', relatedField: 'bodyFatPercent', message: 'Fat mass does not closely match weight × body-fat percentage.', severity: 'warning' });
   }
   if (weightKg != null && fatMassKg != null && fatFreeMassKg != null && !near(fatFreeMassKg, weightKg - fatMassKg, 1)) {
     issues.push({ code: 'inconsistent', field: 'fatFreeMassKg', relatedField: 'fatMassKg', message: 'Fat-free mass does not closely match weight minus fat mass.', severity: 'warning' });
   }
-  if (weightKg != null && bodyWaterPercent != null && bodyWaterKg != null && !near(bodyWaterKg, weightKg * bodyWaterPercent / 100, 1)) {
-    issues.push({ code: 'inconsistent', field: 'bodyWaterKg', relatedField: 'bodyWaterPercent', message: 'Water mass does not closely match weight × body-water percentage.', severity: 'warning' });
+  if (weightKg != null && bodyWaterPercent != null && waterMassKg != null && !near(waterMassKg, weightKg * bodyWaterPercent / 100, 1)) {
+    issues.push({ code: 'inconsistent', field: 'waterMassKg', relatedField: 'bodyWaterPercent', message: 'Water mass does not closely match weight × body-water percentage.', severity: 'warning' });
   }
   if (weightKg != null && muscleMassKg != null && musclePercent != null && !near(musclePercent, muscleMassKg / weightKg * 100, 2, .04)) {
     issues.push({ code: 'inconsistent', field: 'musclePercent', relatedField: 'muscleMassKg', message: 'Muscle percentage does not closely match muscle mass ÷ weight.', severity: 'warning' });
@@ -140,8 +142,8 @@ export function validateFitDaysMeasurement(values: BodyMeasurementValues, confid
 export function sanitizeFitDaysDraft(raw: Partial<BodyMeasurementDraft>): BodyMeasurementDraft {
   const values = { ...EMPTY_BODY_MEASUREMENT_VALUES };
   const rejectedFields: BodyMetricKey[] = [];
-  const rejectedTimestamp = typeof raw.timestamp === 'string' && raw.timestamp.trim() !== '' && !normalizeTimestamp(raw.timestamp);
-  values.timestamp = normalizeTimestamp(raw.timestamp);
+  const rejectedTimestamp = typeof raw.measuredAt === 'string' && raw.measuredAt.trim() !== '' && !normalizeTimestamp(raw.measuredAt);
+  values.measuredAt = normalizeTimestamp(raw.measuredAt);
   for (const field of FITDAYS_FIELDS) {
     const value = parseMeasurementNumber(raw[field.key]);
     const valid = value == null || (value >= field.min && value <= field.max);
@@ -154,8 +156,8 @@ export function sanitizeFitDaysDraft(raw: Partial<BodyMeasurementDraft>): BodyMe
     confidence[key] = parsed == null ? null : Math.max(0, Math.min(1, parsed));
   }
   const issues = validateFitDaysMeasurement(values, confidence)
-    .filter((issue) => !(issue.code === 'missing' && issue.field && (rejectedFields.includes(issue.field as BodyMetricKey) || issue.field === 'timestamp' && rejectedTimestamp)));
-  if (rejectedTimestamp) issues.push({ code: 'out_of_range', field: 'timestamp', message: 'Measurement date and time was invalid and was not imported.', severity: 'warning' });
+    .filter((issue) => !(issue.code === 'missing' && issue.field && (rejectedFields.includes(issue.field as BodyMetricKey) || issue.field === 'measuredAt' && rejectedTimestamp)));
+  if (rejectedTimestamp) issues.push({ code: 'out_of_range', field: 'measuredAt', message: 'Measurement date and time was invalid and was not imported.', severity: 'warning' });
   for (const key of rejectedFields) {
     const label = FITDAYS_FIELDS.find((field) => field.key === key)?.label ?? key;
     issues.push({ code: 'out_of_range', field: key, message: `${label} was outside a realistic range and was not imported.`, severity: 'warning' });
@@ -169,17 +171,17 @@ export function sanitizeFitDaysDraft(raw: Partial<BodyMeasurementDraft>): BodyMe
 }
 
 export function findSimilarBodyMeasurement(existing: BodyMeasurement[], candidate: BodyMeasurementDraft) {
-  if (!candidate.timestamp || candidate.weightKg == null) return undefined;
-  const candidateTime = new Date(candidate.timestamp).getTime();
+  if (!candidate.measuredAt || candidate.weightKg == null) return undefined;
+  const candidateTime = new Date(candidate.measuredAt).getTime();
   const candidateWeight = candidate.weightKg;
   return existing.find((measurement) => {
-    if (!measurement.timestamp || measurement.weightKg == null) return false;
-    const minutesApart = Math.abs(new Date(measurement.timestamp).getTime() - candidateTime) / 60_000;
+    if (!measurement.measuredAt || measurement.weightKg == null) return false;
+    const minutesApart = Math.abs(new Date(measurement.measuredAt).getTime() - candidateTime) / 60_000;
     return minutesApart <= 30 && Math.abs(measurement.weightKg - candidateWeight) <= .3;
   });
 }
 
-export function formatMeasurementTimestamp(timestamp: string | null) {
-  if (!timestamp) return 'Date not read';
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(timestamp));
+export function formatMeasurementTimestamp(measuredAt: string | null) {
+  if (!measuredAt) return 'Date not read';
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(measuredAt));
 }

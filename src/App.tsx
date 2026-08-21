@@ -32,7 +32,7 @@ export default function App() {
   };
 
   return (
-    <AppShell page={page} setPage={navigate} name={controller.data.profile.name} planWeek={activePlanWeek(controller.data.weights)} trainingStreak={trainingWeekStreak(controller.data.sessions)}>
+    <AppShell page={page} setPage={navigate} name={controller.data.profile.name} planWeek={activePlanWeek(controller.data.measurements)} trainingStreak={trainingWeekStreak(controller.data.sessions)}>
       <Suspense fallback={<PageSkeleton />}>
         {page === 'home' ? <HomePage controller={controller} setPage={setPage} onStartWorkout={startWorkout} /> : null}
         {page === 'food' ? <FoodPage controller={controller} /> : null}

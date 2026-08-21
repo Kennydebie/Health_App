@@ -1,17 +1,17 @@
 import { useState, type CSSProperties } from 'react';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Activity, Award, BedDouble, Check, CircleAlert, Droplets, Dumbbell, Footprints, Medal, Plus, Scale, Sparkles, Target, TrendingDown, Trophy } from 'lucide-react';
 import { ToneIcon } from '../components/Visuals';
 import { FitDaysImport } from './FitDaysImport';
+import { BodyCompositionDashboard } from './BodyCompositionDashboard';
 import { exerciseMap } from '../data/exercises';
 import { datesInWeek, getWeekSnapshot, personalRecordEvents, weeklyConsistency, weeklyVolumeSeries } from '../lib/engagement';
 import { prettyDate, shiftDate, toDateKey } from '../lib/date';
 import { average, weightTrend } from '../lib/progress';
-import { formatMeasurementTimestamp } from '../lib/fitdays';
+import { currentWeight, goalProgressPercentage, startingWeight } from '../lib/bodyMeasurements';
 import type { AppController } from '../state/useAppData';
 
 interface ProgressPageProps { controller: AppController; }
-type Range = '4w' | '3m' | 'all';
 type ProgressTab = 'overview' | 'body' | 'training' | 'nutrition';
 
 const CHART_TOOLTIP_STYLE = { background: '#101a20', border: '1px solid rgba(116, 140, 151, .28)', borderRadius: 12, color: '#f6f2ed' };
@@ -19,20 +19,17 @@ const CHART_TOOLTIP_STYLE = { background: '#101a20', border: '1px solid rgba(116
 export function ProgressPage({ controller }: ProgressPageProps) {
   const { data, saveWeight, totalsForDate, updateHabit } = controller;
   const [weightDate, setWeightDate] = useState(toDateKey());
-  const [weight, setWeight] = useState(String(data.profile.currentWeightKg));
+  const canonicalCurrentWeight = currentWeight(data.measurements);
+  const canonicalStartingWeight = startingWeight(data.measurements);
+  const [weight, setWeight] = useState(canonicalCurrentWeight == null ? '' : String(canonicalCurrentWeight));
+  const [waist, setWaist] = useState('');
   const exerciseIds = [...new Set(data.sessions.flatMap((session) => session.sets.map((set) => set.exerciseId)))];
   const [exerciseId, setExerciseId] = useState(exerciseIds[0] ?? 'bench-press');
-  const [range, setRange] = useState<Range>('4w');
   const [saved, setSaved] = useState(false);
   const [progressTab, setProgressTab] = useState<ProgressTab>(() => (localStorage.getItem('cut-forward-progress-tab') as ProgressTab | null) ?? 'overview');
-  const trend = weightTrend(data.weights);
+  const trend = weightTrend(data.measurements);
   const today = toDateKey();
   const last7 = datesInWeek(today);
-  const rangeStart = range === '4w' ? shiftDate(today, -27) : range === '3m' ? shiftDate(today, -89) : '0000-01-01';
-
-  const sortedWeights = [...data.weights].sort((a, b) => a.date.localeCompare(b.date));
-  const measurementHistory = [...data.bodyMeasurements].sort((a, b) => (b.timestamp ?? b.createdAt).localeCompare(a.timestamp ?? a.createdAt));
-  const chartData = sortedWeights.map((entry, index) => ({ date: entry.date, label: entry.date.slice(5), weight: entry.weightKg, average: average(sortedWeights.slice(Math.max(0, index - 6), index + 1).map((item) => item.weightKg)) })).filter((entry) => entry.date >= rangeStart);
 
   const currentTotals = last7.map(totalsForDate);
   const loggedTotals = currentTotals.filter((item) => item.calories > 0);
@@ -86,10 +83,9 @@ export function ProgressPage({ controller }: ProgressPageProps) {
     return [{ date: session.date.slice(5), weight: best.weightKg, reps: best.reps, volume: sets.reduce((sum, set) => sum + set.weightKg * set.reps, 0) }];
   });
   const habit = data.habits.find((entry) => entry.date === today) ?? { date: today, water: false, walk: false, sleep: false };
-  const denominator = data.profile.startWeightKg - data.profile.goalWeightKg;
-  const weightProgress = denominator ? Math.max(0, Math.min(100, (data.profile.startWeightKg - trend.currentAverage) / denominator * 100)) : 0;
+  const weightProgress = goalProgressPercentage(data.measurements, data.profile.goalWeightKg);
   const validWeight = Number(weight) > 30 && Number(weight) < 300;
-  const lostKg = Math.max(0, data.profile.startWeightKg - trend.currentAverage);
+  const lostKg = canonicalStartingWeight == null || canonicalCurrentWeight == null ? 0 : Math.max(0, canonicalStartingWeight - canonicalCurrentWeight);
   const milestones = [
     { label: 'First five workouts', reached: allCompletedWorkouts >= 5, detail: `${Math.min(allCompletedWorkouts, 5)} / 5 completed`, Icon: Dumbbell },
     { label: 'First 2 kg toward goal', reached: lostKg >= 2, detail: `${lostKg.toFixed(1)} / 2.0 kg`, Icon: Scale },
@@ -99,15 +95,15 @@ export function ProgressPage({ controller }: ProgressPageProps) {
   const selectProgressTab = (tab: ProgressTab) => { setProgressTab(tab); localStorage.setItem('cut-forward-progress-tab', tab); };
 
   return <div className="page progress-page premium-progress">
-    <header className="page-header"><div><p className="eyebrow">Progress & review</p><h1>Proof of consistency.</h1><p>Measurements, training and nutrition shown as actual records—with trends clearly separated from daily values.</p></div><form className="weight-entry" onSubmit={(event) => { event.preventDefault(); if (!validWeight) return; saveWeight(weightDate, Number(weight)); setSaved(true); window.setTimeout(() => setSaved(false), 1800); }}><label>Date<input type="date" value={weightDate} onChange={(event) => setWeightDate(event.target.value)} /></label><label>Body weight<div><input type="number" inputMode="decimal" step="0.1" min="30" max="300" value={weight} onChange={(event) => setWeight(event.target.value)} /><span>kg</span></div></label><button className="primary-button" type="submit" disabled={!validWeight}>{saved ? <Check size={18} /> : <Plus size={18} />}{saved ? 'Saved' : 'Log weight'}</button></form></header>
+    <header className="page-header"><div><p className="eyebrow">Progress & review</p><h1>Proof of consistency.</h1><p>One trusted timeline for manual weigh-ins and full FitDays body-composition readings.</p></div><form className="weight-entry" onSubmit={(event) => { event.preventDefault(); if (!validWeight) return; saveWeight(weightDate, Number(weight), waist ? Number(waist) : null); setSaved(true); window.setTimeout(() => setSaved(false), 1800); }}><label>Date<input type="date" value={weightDate} onChange={(event) => setWeightDate(event.target.value)} /></label><label>Body weight<div><input type="number" inputMode="decimal" step="0.1" min="30" max="300" value={weight} onChange={(event) => setWeight(event.target.value)} /><span>kg</span></div></label><label>Waist <small>optional</small><div><input type="number" inputMode="decimal" step="0.1" min="40" max="200" placeholder="—" value={waist} onChange={(event) => setWaist(event.target.value)} /><span>cm</span></div></label><button className="primary-button" type="submit" disabled={!validWeight}>{saved ? <Check size={18} /> : <Plus size={18} />}{saved ? 'Saved' : 'Log measurement'}</button></form></header>
 
     <nav className="progress-tabs" aria-label="Progress sections">{(['overview', 'body', 'training', 'nutrition'] as const).map((tab) => <button type="button" key={tab} aria-selected={progressTab === tab} className={progressTab === tab ? 'active' : ''} onClick={() => selectProgressTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
 
-    {progressTab === 'body' ? <FitDaysImport controller={controller} /> : null}
+    {progressTab === 'body' ? <><FitDaysImport controller={controller} /><BodyCompositionDashboard controller={controller} /></> : null}
 
-    <section className="progress-hero card" hidden={progressTab !== 'overview' && progressTab !== 'body'}>
+    <section className="progress-hero card" hidden={progressTab !== 'overview'}>
       <div className="goal-orbit" style={{ '--goal-progress': `${weightProgress * 3.6}deg` } as CSSProperties}><div><strong>{Math.round(weightProgress)}%</strong><span>to goal</span></div></div>
-      <div className="progress-hero__copy"><p className="eyebrow">Project 75 journey</p><h2>{trend.currentAverage ? trend.currentAverage.toFixed(1) : '—'} kg</h2><p><strong>{data.profile.startWeightKg} kg</strong> start <span>→</span> <strong>{data.profile.goalWeightKg} kg</strong> goal</p><div className="pace-badge"><TrendingDown size={16} /> {Math.abs(weightChange).toFixed(2)} kg/week <span>seven-day average pace</span></div></div>
+      <div className="progress-hero__copy"><p className="eyebrow">Project 75 journey</p><h2>{trend.currentAverage ? trend.currentAverage.toFixed(1) : '—'} kg</h2><p><strong>{canonicalStartingWeight == null ? '—' : canonicalStartingWeight.toFixed(1)} kg</strong> start <span>→</span> <strong>{data.profile.goalWeightKg} kg</strong> goal</p><div className="pace-badge"><TrendingDown size={16} /> {Math.abs(weightChange).toFixed(2)} kg/week <span>seven-day average pace</span></div></div>
       <div className="progress-hero__consistency"><span>Weekly consistency</span><strong>{consistency.percent}%</strong><p>{consistency.strength} of {consistency.plannedStrength} strength sessions · {consistency.cardioMinutes} cardio min</p></div>
     </section>
 
@@ -118,16 +114,7 @@ export function ProgressPage({ controller }: ProgressPageProps) {
       <article className="metric-card"><ToneIcon Icon={Award} tone="violet" /><p>Personal records</p><strong>{records.length}</strong><span>Actual set improvements</span></article>
     </section>
 
-    <section className="progress-layout premium-progress-layout" hidden={progressTab !== 'overview' && progressTab !== 'body'}>
-      {progressTab === 'body' ? <article className="card weight-chart-card"><div className="section-title"><div><p className="eyebrow">Body weight</p><h2>Daily readings + rolling trend</h2></div><div className="range-toggle" aria-label="Weight chart range">{([['4w', '4 weeks'], ['3m', '3 months'], ['all', 'All time']] as const).map(([id, label]) => <button type="button" key={id} className={range === id ? 'active' : ''} onClick={() => setRange(id)}>{label}</button>)}</div></div>
-        {chartData.length ? <div className="chart-area"><ResponsiveContainer width="100%" height="100%"><AreaChart data={chartData} margin={{ left: 8, right: 20, top: 12, bottom: 8 }}><defs><linearGradient id="weightGradientPremium" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#5caef6" stopOpacity={.38} /><stop offset="100%" stopColor="#5caef6" stopOpacity={0} /></linearGradient></defs><CartesianGrid stroke="rgba(139,161,171,.14)" vertical={false} /><XAxis dataKey="label" stroke="#778991" tickLine={false} axisLine={false} minTickGap={22} /><YAxis domain={['dataMin - 0.5', 'dataMax + 0.5']} stroke="#778991" tickLine={false} axisLine={false} width={54} tickFormatter={(value) => Number(value).toFixed(1)} /><Tooltip contentStyle={CHART_TOOLTIP_STYLE} labelFormatter={(_, payload) => payload?.[0]?.payload?.date ? prettyDate(payload[0].payload.date) : ''} /><Area type="monotone" dataKey="average" name="7-day average" stroke="#5caef6" strokeWidth={3} fill="url(#weightGradientPremium)" animationDuration={500} /><Line type="monotone" dataKey="weight" name="Daily measurement" stroke="#84969d" strokeWidth={1.4} dot={{ r: 2.5, fill: '#101a20' }} /></AreaChart></ResponsiveContainer></div> : <div className="empty-state"><Scale size={30} /><h3>No measurements in this range</h3><p>Log a weight or choose a longer time range.</p></div>}
-        <div className="chart-legend"><span><i className="solid" /> Seven-day rolling average</span><span><i className="faint" /> Actual measurement</span></div>
-      </article> : null}
-
-      {progressTab === 'body' ? <article className="card measurement-history"><div className="section-title"><div><p className="eyebrow">Measurement history</p><h2>Saved body composition</h2></div><span>{measurementHistory.length} FitDays {measurementHistory.length === 1 ? 'entry' : 'entries'}</span></div>
-        {measurementHistory.length ? <div className="measurement-history-list">{measurementHistory.slice(0, 8).map((measurement) => <article key={measurement.id}><span className="measurement-source"><Sparkles size={15} /></span><div><strong>{formatMeasurementTimestamp(measurement.timestamp)}</strong><small>FitDays AI screenshot</small></div><dl><div><dt>Weight</dt><dd>{measurement.weightKg == null ? '—' : `${measurement.weightKg} kg`}</dd></div><div><dt>Body fat</dt><dd>{measurement.bodyFatPercent == null ? '—' : `${measurement.bodyFatPercent}%`}</dd></div><div><dt>Muscle</dt><dd>{measurement.muscleMassKg == null ? '—' : `${measurement.muscleMassKg} kg`}</dd></div><div><dt>Water</dt><dd>{measurement.bodyWaterPercent == null ? '—' : `${measurement.bodyWaterPercent}%`}</dd></div></dl></article>)}</div> : <div className="empty-state compact"><Scale size={28} /><h3>No FitDays measurements yet</h3><p>Import a screenshot above. You will review every value before it appears here.</p></div>}
-      </article> : null}
-
+    <section className="progress-layout premium-progress-layout" hidden={progressTab !== 'overview'}>
       <article className="card consistency-card" hidden={progressTab !== 'overview'}><div className="section-title"><div><p className="eyebrow">Last 28 days</p><h2>Consistency calendar</h2></div><span>{consistency.percent}% to date</span></div><div className="consistency-calendar">{consistencyDays.map((item) => <div key={item.date} className={`score-${item.score}`} title={`${prettyDate(item.date)} · ${item.workout ? 'Workout ' : ''}${item.nutrition ? 'Nutrition ' : ''}${item.cardio ? 'Cardio' : ''}`}><span>{new Date(`${item.date}T12:00:00`).getDate()}</span><i>{item.workout ? <Dumbbell size={10} /> : item.cardio ? <Activity size={10} /> : item.nutrition ? <Check size={10} /> : null}</i></div>)}</div><div className="consistency-key"><span><i className="low" /> One signal</span><span><i className="mid" /> Two signals</span><span><i className="high" /> Three signals</span></div></article>
     </section>
 

@@ -28,7 +28,7 @@ const numericProperties = {
   boneMassKg: { type: ['number', 'null'] },
   proteinMassKg: { type: ['number', 'null'] },
   proteinPercent: { type: ['number', 'null'] },
-  bodyWaterKg: { type: ['number', 'null'] },
+  waterMassKg: { type: ['number', 'null'] },
   bodyWaterPercent: { type: ['number', 'null'] },
   subcutaneousFatPercent: { type: ['number', 'null'] },
   visceralFatIndex: { type: ['number', 'null'] },
@@ -45,25 +45,25 @@ const fitDaysSchema = {
     values: {
       type: 'object',
       additionalProperties: false,
-      required: ['timestamp', ...valueKeys],
-      properties: { timestamp: { type: ['string', 'null'] }, ...numericProperties },
+      required: ['measuredAt', ...valueKeys],
+      properties: { measuredAt: { type: ['string', 'null'] }, ...numericProperties },
     },
     confidence: {
       type: 'object',
       additionalProperties: false,
-      required: ['timestamp', ...valueKeys],
-      properties: { timestamp: { type: ['number', 'null'] }, ...numericProperties },
+      required: ['measuredAt', ...valueKeys],
+      properties: { measuredAt: { type: ['number', 'null'] }, ...numericProperties },
     },
   },
 };
 
 const extractionPrompt = `Interpret this FitDays body-composition screenshot directly as an image. Labels may be Dutch or English.
 
-Extract only values that are visibly present and readable: measurement timestamp, weight kg, BMI, body fat %, fat mass kg, fat-free body mass kg, muscle mass kg, muscle %, skeletal muscle %, bone mass kg, protein mass kg, protein %, total body water kg, body water %, subcutaneous fat %, visceral fat index, BMR kcal, and body age.
+Extract only values that are visibly present and readable: measurement date and time, weight kg, BMI, body fat %, fat mass kg, fat-free body mass kg, muscle mass kg, muscle %, skeletal muscle %, bone mass kg, protein mass kg, protein %, total body water kg, body water %, subcutaneous fat %, visceral fat index, BMR kcal, and body age.
 
 Rules:
 - Return null for every missing, cropped, ambiguous, or unreadable value. Never estimate, infer, calculate, or guess a missing value.
-- Return the timestamp as ISO 8601 including local date and time when both are visible. Otherwise return null.
+- Return measuredAt as ISO 8601 including local date and time when both are visible. Otherwise return null.
 - Return numbers only, without unit strings. Interpret decimal commas as decimal points.
 - Confidence is 0 to 1 for each extracted field and null when the value is null.
 - Ignore classifications and judgments such as high, low, excellent, standard, pre-obese, obesity, body type, and ideal body weight.
@@ -196,7 +196,7 @@ async function analyzeScreenshot(request: Request, env: Env) {
     if (!parsed.values || !parsed.confidence) return json({ code: 'image_unreadable' }, 422);
     const measurement = sanitizeFitDaysDraft({ ...parsed.values, confidence: parsed.confidence, source: 'fitdays_ai_image', issues: [] });
     const extractedCount = valueKeys.filter((key) => measurement[key as keyof BodyMeasurementValues] != null).length;
-    if (extractedCount === 0 && !measurement.timestamp) return json({ code: 'image_unreadable' }, 422);
+    if (extractedCount === 0 && !measurement.measuredAt) return json({ code: 'image_unreadable' }, 422);
     return json({ measurement });
   } catch {
     return json({ code: 'image_unreadable' }, 422);

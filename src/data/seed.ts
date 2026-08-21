@@ -1,6 +1,7 @@
 import { defaultProgram } from './exercises';
 import { shiftDate, toDateKey } from '../lib/date';
-import type { AppData, FoodLogEntry, WeightEntry, WorkoutSession } from '../types/models';
+import { DEFAULT_BODY_GOALS } from '../lib/bodyMeasurements';
+import type { AppData, BodyMeasurement, FoodLogEntry, WorkoutSession } from '../types/models';
 
 const now = new Date().toISOString();
 const today = toDateKey();
@@ -24,7 +25,31 @@ const foodLog: FoodLogEntry[] = [
 ];
 
 const weightValues = [83.8, 83.6, 83.7, 83.3, 83.4, 83.2, 83.0, 83.1, 82.9, 82.8, 82.9, 82.6, 82.7, 82.6];
-const weights: WeightEntry[] = weightValues.map((weightKg, index) => ({ id: `demo_weight_${index}`, date: shiftDate(today, index - 13), weightKg }));
+const measurements: BodyMeasurement[] = weightValues.map((weightKg, index) => ({
+  id: `demo_weight_${index}`,
+  measuredAt: `${shiftDate(today, index - 13)}T08:00:00.000Z`,
+  weightKg,
+  bmi: null,
+  bodyFatPercent: null,
+  fatMassKg: null,
+  fatFreeMassKg: null,
+  muscleMassKg: null,
+  musclePercent: null,
+  skeletalMusclePercent: null,
+  boneMassKg: null,
+  proteinMassKg: null,
+  proteinPercent: null,
+  waterMassKg: null,
+  bodyWaterPercent: null,
+  subcutaneousFatPercent: null,
+  visceralFatIndex: null,
+  bmrKcal: null,
+  bodyAge: null,
+  waistCircumferenceCm: null,
+  source: 'manual',
+  createdAt: now,
+  isDemo: true,
+}));
 
 const demoSessions: WorkoutSession[] = [
   { id: 'demo_session_1', date: shiftDate(today, -7), dayId: 'monday', workoutId: 'upper_a', title: 'Upper A', startedAt: now, completedAt: now, durationSeconds: 3120, sets: [
@@ -44,9 +69,9 @@ const demoSessions: WorkoutSession[] = [
 
 export function createSeedData(): AppData {
   return {
-    version: 6,
+    version: 7,
     profile: {
-      name: 'Kenny', age: 29, sex: 'male', heightCm: 174, startWeightKg: 83.8, currentWeightKg: 82.6, goalWeightKg: 75,
+      name: 'Kenny', age: 29, sex: 'male', heightCm: 174, goalWeightKg: 75,
       calorieTarget: 2100, proteinTarget: 170, carbTarget: 205, fatTarget: 67,
       trainingDays: ['Monday', 'Tuesday', 'Thursday', 'Saturday'], units: 'metric',
       equipment: ['Adjustable dumbbells', 'Barbell', 'Bench', 'Dip setup', 'Bodyweight'],
@@ -61,8 +86,8 @@ export function createSeedData(): AppData {
       { foodId: 'walnuts', servingId: 'handful', quantity: 0.75 },
       { foodId: 'honey', servingId: 'teaspoon', quantity: 1 },
     ] }],
-    weights: structuredClone(weights),
-    bodyMeasurements: [],
+    measurements: structuredClone(measurements),
+    bodyGoals: structuredClone(DEFAULT_BODY_GOALS),
     program: structuredClone(defaultProgram),
     sessions: structuredClone(demoSessions),
     habits: [{ date: today, water: false, walk: false, sleep: true }],

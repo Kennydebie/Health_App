@@ -44,8 +44,6 @@ export interface UserProfile {
   age: number;
   sex: 'male' | 'female';
   heightCm: number;
-  startWeightKg: number;
-  currentWeightKg: number;
   goalWeightKg: number;
   calorieTarget: number;
   proteinTarget: number;
@@ -56,15 +54,6 @@ export interface UserProfile {
   equipment: string[];
   balanceLevel: 'beginner' | 'developing' | 'stable';
   trainingTemplate: TrainingTemplate;
-}
-
-export interface WeightEntry {
-  id: string;
-  date: string;
-  weightKg: number;
-  recordedAt?: string;
-  source?: 'manual' | 'fitdays_ai_image';
-  sourceMeasurementId?: string;
 }
 
 export type BodyMetricKey =
@@ -79,15 +68,16 @@ export type BodyMetricKey =
   | 'boneMassKg'
   | 'proteinMassKg'
   | 'proteinPercent'
-  | 'bodyWaterKg'
+  | 'waterMassKg'
   | 'bodyWaterPercent'
   | 'subcutaneousFatPercent'
   | 'visceralFatIndex'
   | 'bmrKcal'
-  | 'bodyAge';
+  | 'bodyAge'
+  | 'waistCircumferenceCm';
 
 export interface BodyMeasurementValues {
-  timestamp: string | null;
+  measuredAt: string | null;
   weightKg: number | null;
   bmi: number | null;
   bodyFatPercent: number | null;
@@ -99,33 +89,48 @@ export interface BodyMeasurementValues {
   boneMassKg: number | null;
   proteinMassKg: number | null;
   proteinPercent: number | null;
-  bodyWaterKg: number | null;
+  waterMassKg: number | null;
   bodyWaterPercent: number | null;
   subcutaneousFatPercent: number | null;
   visceralFatIndex: number | null;
   bmrKcal: number | null;
   bodyAge: number | null;
+  waistCircumferenceCm: number | null;
 }
 
-export type BodyMeasurementConfidence = Record<'timestamp' | BodyMetricKey, number | null>;
+export type BodyMeasurementConfidence = Record<'measuredAt' | BodyMetricKey, number | null>;
 
 export interface MeasurementIssue {
   code: 'missing' | 'low_confidence' | 'out_of_range' | 'inconsistent';
-  field?: 'timestamp' | BodyMetricKey;
+  field?: 'measuredAt' | BodyMetricKey;
   relatedField?: BodyMetricKey;
   message: string;
   severity: 'notice' | 'warning';
 }
 
 export interface BodyMeasurementDraft extends BodyMeasurementValues {
-  source: 'fitdays_ai_image';
-  confidence: BodyMeasurementConfidence;
-  issues: MeasurementIssue[];
+  source: 'manual' | 'fitdays_ai_image';
+  confidence?: BodyMeasurementConfidence;
+  issues?: MeasurementIssue[];
 }
 
 export interface BodyMeasurement extends BodyMeasurementDraft {
   id: string;
   createdAt: string;
+  isDemo?: boolean;
+  excludedFromTrend?: BodyMetricKey[];
+  confirmedOutlierMetrics?: BodyMetricKey[];
+}
+
+export interface BodyGoalSettings {
+  version: 1;
+  bodyFatCheckpointPercent: number;
+  bodyFatTargetMinPercent: number;
+  bodyFatTargetMaxPercent: number;
+  bodyFatPersonalTargetPercent: number;
+  fatFreeMassTargetKg: number | null;
+  muscleMassTargetKg: number | null;
+  waistTargetCm: number | null;
 }
 
 export interface Exercise {
@@ -240,8 +245,8 @@ export interface AppData {
   favorites: string[];
   recentFoodIds: string[];
   savedMeals: SavedMeal[];
-  weights: WeightEntry[];
-  bodyMeasurements: BodyMeasurement[];
+  measurements: BodyMeasurement[];
+  bodyGoals: BodyGoalSettings;
   program: WorkoutDay[];
   sessions: WorkoutSession[];
   habits: HabitEntry[];

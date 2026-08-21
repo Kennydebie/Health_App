@@ -1,7 +1,7 @@
 import { exerciseMap } from '../data/exercises';
 import { shiftDate, toDateKey } from './date';
 import { workoutVolume } from './progress';
-import type { AppData, WeightEntry, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
+import type { AppData, BodyMeasurement, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 const workoutDisplayNames: Partial<Record<WorkoutId, string>> = {
   upper_a: 'Upper Body · Chest & Back',
@@ -97,8 +97,8 @@ export function getWeekSnapshot(data: AppData, reference = toDateKey()): WeekSna
   };
 }
 
-export function activePlanWeek(weights: WeightEntry[], reference = toDateKey()): number {
-  const first = [...weights].sort((a, b) => a.date.localeCompare(b.date))[0]?.date;
+export function activePlanWeek(measurements: BodyMeasurement[], reference = toDateKey()): number {
+  const first = measurements.filter((measurement) => !measurement.isDemo && measurement.measuredAt).sort((a, b) => a.measuredAt!.localeCompare(b.measuredAt!))[0]?.measuredAt?.slice(0, 10);
   if (!first) return 1;
   const elapsed = Math.max(0, new Date(`${reference}T12:00:00`).getTime() - new Date(`${first}T12:00:00`).getTime());
   return Math.floor(elapsed / 604_800_000) + 1;

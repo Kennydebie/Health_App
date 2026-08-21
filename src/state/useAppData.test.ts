@@ -14,13 +14,12 @@ describe('app data migration', () => {
     saved.program = saved.program.slice(0, 3);
     const original = {
       foodLog: structuredClone(saved.foodLog), favorites: structuredClone(saved.favorites), recentFoodIds: structuredClone(saved.recentFoodIds),
-      savedMeals: structuredClone(saved.savedMeals), weights: structuredClone(saved.weights), sessions: structuredClone(saved.sessions), habits: structuredClone(saved.habits),
+      savedMeals: structuredClone(saved.savedMeals), measurements: structuredClone(saved.measurements), sessions: structuredClone(saved.sessions), habits: structuredClone(saved.habits),
     };
 
     const migrated = migrateAppData(saved);
 
-    expect(migrated.version).toBe(6);
-    expect(migrated.bodyMeasurements).toEqual([]);
+    expect(migrated.version).toBe(7);
     expect(migrated.program).toHaveLength(7);
     expect(migrated.program.filter((day) => !day.isRestDay).map((day) => day.title)).toEqual(['Upper A', 'Lower A', 'Upper B', 'Lower B']);
     expect(migrated.profile).toMatchObject({ balanceLevel: 'beginner', trainingTemplate: 'four-day-upper-lower' });
@@ -28,7 +27,7 @@ describe('app data migration', () => {
     expect(migrated.favorites).toEqual(original.favorites);
     expect(migrated.recentFoodIds).toEqual(original.recentFoodIds);
     expect(migrated.savedMeals).toEqual(original.savedMeals);
-    expect(migrated.weights).toEqual(original.weights);
+    expect(migrated.measurements).toEqual(original.measurements);
     expect(withoutWorkoutIds(migrated.sessions)).toEqual(withoutWorkoutIds(original.sessions));
     expect(migrated.sessions.every((session) => Boolean(session.workoutId))).toBe(true);
     expect(migrated.habits).toEqual(original.habits);
@@ -69,7 +68,41 @@ describe('app data migration', () => {
     const reloaded = migrateAppData(JSON.parse(JSON.stringify(saved)));
     expect(reloaded.program[0].exercises[0]).toMatchObject({ sets: 4, restSeconds: 210, rir: '3', notes: 'Custom note', warmupSets: 4 });
     expect(reloaded.foodLog).toEqual(saved.foodLog);
-    expect(reloaded.weights).toEqual(saved.weights);
+    expect(reloaded.measurements).toEqual(saved.measurements);
     expect(reloaded.sessions).toEqual(saved.sessions);
+  });
+
+  it('reconciles legacy split collections without duplicating a FitDays weight', () => {
+    const seed = createSeedData();
+    const base = { ...seed };
+    delete (base as Partial<typeof seed>).measurements;
+    delete (base as Partial<typeof seed>).bodyGoals;
+    const legacy = {
+      ...base,
+      version: 6,
+      profile: { ...seed.profile, startWeightKg: 83.8, currentWeightKg: 82.6 },
+      weights: [
+        { id: 'demo_weight_0', date: '2026-08-01', weightKg: 82.6 },
+        { id: 'linked_weight', date: '2026-08-21', recordedAt: '2026-08-21T07:32:00.000Z', weightKg: 87.1, source: 'fitdays_ai_image', sourceMeasurementId: 'fitdays_1' },
+      ],
+      bodyMeasurements: [{
+        id: 'fitdays_1', timestamp: '2026-08-21T07:32:00.000Z', weightKg: 87.1, bodyFatPercent: 28.9,
+        bodyWaterKg: 45.2, source: 'fitdays_ai_image', createdAt: '2026-08-21T08:00:00.000Z',
+      }],
+    };
+    const migrated = migrateAppData(legacy as never);
+    expect(migrated.measurements).toHaveLength(1);
+    expect(migrated.measurements[0]).toMatchObject({ id: 'fitdays_1', measuredAt: '2026-08-21T07:32:00.000Z', weightKg: 87.1, waterMassKg: 45.2 });
+    expect(migrated.profile).not.toHaveProperty('currentWeightKg');
+    expect(migrated.profile).not.toHaveProperty('startWeightKg');
+  });
+
+  it('persists canonical measurements and body goals through a JSON round trip', () => {
+    const saved = createSeedData();
+    saved.measurements = [{ ...saved.measurements[0], id: 'real_1', isDemo: false, measuredAt: '2026-08-21T07:32:00.000Z', weightKg: 87.1, bodyFatPercent: 28.9 }];
+    saved.bodyGoals.bodyFatPersonalTargetPercent = 18;
+    const reloaded = migrateAppData(JSON.parse(JSON.stringify(saved)));
+    expect(reloaded.measurements).toEqual(saved.measurements);
+    expect(reloaded.bodyGoals.bodyFatPersonalTargetPercent).toBe(18);
   });
 });

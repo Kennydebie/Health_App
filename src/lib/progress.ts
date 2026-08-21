@@ -1,22 +1,23 @@
-import type { WeightEntry, WorkoutSession } from '../types/models';
+import { rollingWeightSeries, weightHistory } from './bodyMeasurements';
+import type { BodyMeasurement, WorkoutSession } from '../types/models';
 
 export function average(values: number[]): number {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
 
-export function weightTrend(weights: WeightEntry[]) {
-  const sorted = [...weights].sort((a, b) => a.date.localeCompare(b.date));
-  const latest14 = sorted.slice(-14);
-  const currentWeek = latest14.slice(-7);
-  const previousWeek = latest14.slice(-14, -7);
-  const currentAverage = average(currentWeek.map((entry) => entry.weightKg));
-  const previousAverage = average(previousWeek.map((entry) => entry.weightKg));
+export function weightTrend(measurements: BodyMeasurement[]) {
+  const sorted = weightHistory(measurements);
+  const rolling = rollingWeightSeries(measurements);
+  const latest = rolling.at(-1);
+  const cutoff = latest ? new Date(latest.measuredAt).getTime() - 7 * 86_400_000 : 0;
+  const previousAverage = rolling.filter((entry) => new Date(entry.measuredAt).getTime() <= cutoff).at(-1)?.average ?? 0;
+  const currentAverage = latest?.average ?? 0;
   return {
     current: sorted.at(-1)?.weightKg ?? 0,
     currentAverage,
     previousAverage,
     weeklyChange: currentAverage && previousAverage ? currentAverage - previousAverage : 0,
-    series: sorted,
+    series: rolling,
   };
 }
 

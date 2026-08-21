@@ -29,6 +29,134 @@
   --shadow: 0 22px 70px rgba(2, 10, 8, .34);
 }
 
+/* Canonical body-composition dashboard */
+.body-dashboard { display: grid; gap: 18px; margin-top: 18px; }
+.body-empty { padding: 34px; text-align: center; background: radial-gradient(circle at 50% 0, rgba(131,189,229,.12), transparent 48%), var(--surface); }
+.body-empty > svg { margin-bottom: 14px; color: var(--blue); }
+.body-empty h2 { margin-bottom: 8px; }
+.body-empty p:last-child { max-width: 680px; margin: 0 auto; color: var(--muted); line-height: 1.65; }
+.body-summary { display: grid; grid-template-columns: minmax(220px,.85fr) minmax(440px,1.55fr); gap: 18px 28px; padding: 27px; overflow: hidden; background: radial-gradient(circle at 4% 15%, rgba(131,189,229,.13), transparent 36%), linear-gradient(145deg, #162321, #101918); }
+.body-summary__lead h2 { margin: 2px 0 6px; font-size: clamp(38px,5vw,58px); }
+.body-summary__lead h2 small { color: var(--muted); font-size: 18px; }
+.body-summary__lead > span { color: var(--muted); font-size: 12px; }
+.body-summary__metrics { display: grid; grid-template-columns: repeat(4,1fr); align-self: center; border: 1px solid var(--line-soft); border-radius: 16px; overflow: hidden; background: rgba(2,9,8,.19); }
+.body-summary__metrics span { display: grid; gap: 6px; padding: 16px; border-right: 1px solid var(--line-soft); }
+.body-summary__metrics span:last-child { border-right: 0; }
+.body-summary__metrics small { color: var(--muted); font-size: 9px; }
+.body-summary__metrics strong { font-size: 17px; }
+.body-summary__quality { grid-column: 1 / -1; display: flex; gap: 10px; align-items: flex-start; padding: 13px 15px; color: var(--lime); border: 1px solid rgba(143,215,181,.14); border-radius: 13px; background: rgba(143,215,181,.055); }
+.body-summary__quality p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.body-summary__quality strong { display: block; margin-bottom: 2px; color: var(--text); font-size: 11px; }
+.body-kpi-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.body-kpi { min-width: 0; padding: 19px; }
+.body-kpi > header { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.body-kpi__value { display: flex; justify-content: space-between; align-items: end; gap: 8px; margin-top: 10px; }
+.body-kpi__value > strong { font-size: 31px; }
+.body-kpi__value > strong small { color: var(--muted); font-size: 10px; }
+.body-kpi__value > span { display: flex; align-items: center; gap: 4px; color: var(--orange); font-size: 8px; text-align: right; }
+.body-kpi__value > span.positive { color: var(--lime); }
+.body-spark { height: 50px; margin: 8px -4px 4px; }
+.body-kpi dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0; }
+.body-kpi dl div { min-width: 0; padding: 8px; border-radius: 9px; background: rgba(255,255,255,.022); }
+.body-kpi dt { color: var(--muted-2); font-size: 7px; text-transform: uppercase; letter-spacing: .06em; }
+.body-kpi dd { margin: 4px 0 0; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; }
+.body-kpi > footer { margin-top: 10px; color: var(--muted-2); font-size: 8px; }
+.body-projection { display: grid; grid-template-columns: 280px minmax(0,1fr); gap: 28px; align-items: center; padding: 25px; background: linear-gradient(115deg, rgba(183,164,227,.07), rgba(131,189,229,.035)), var(--surface); }
+.body-projection h2 { margin-bottom: 7px; }
+.body-projection > div:first-child > p:last-child { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.projection-path { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.projection-path > svg { flex: 0 0 auto; color: var(--muted-2); }
+.projection-path span { min-width: 110px; display: grid; gap: 3px; padding: 13px; border: 1px solid var(--line-soft); border-radius: 12px; background: rgba(5,14,12,.34); }
+.projection-path span.goal { border-color: rgba(143,215,181,.25); background: rgba(143,215,181,.075); }
+.projection-path small { color: var(--muted); font-size: 8px; }
+.projection-path strong { font-size: 18px; }
+.projection-path em { color: var(--blue); font-size: 8px; font-style: normal; }
+.body-trend-card { padding: 24px; }
+.body-chart-controls > div:last-child { display: flex; align-items: center; gap: 10px; }
+.body-chart-controls select { min-width: 185px; min-height: 37px; font-size: 10px; }
+.body-chart { height: 340px; margin-top: 12px; }
+.body-trend-card .chart-legend { flex-wrap: wrap; }
+.body-trend-card .chart-legend span:last-child { margin-left: auto; color: var(--muted-2); }
+.chart-legend i.target { border-top: 2px dashed var(--orange); background: transparent; }
+.body-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.fat-quality, .secondary-estimates { padding: 22px; }
+.fat-quality > div:not(.empty-state) { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin: 14px 0; }
+.fat-quality > div > span, .secondary-estimates > div > span { display: grid; gap: 5px; padding: 11px; border-radius: 10px; background: rgba(255,255,255,.025); }
+.fat-quality small, .secondary-estimates small { color: var(--muted); font-size: 8px; }
+.fat-quality > p:last-child, .secondary-estimates > p:last-child { display: flex; gap: 7px; align-items: flex-start; margin: 10px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.secondary-estimates > div { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; margin-top: 14px; }
+.secondary-estimates strong { font-size: 12px; }
+.body-goals { overflow: hidden; }
+.body-goals > summary { padding: 18px 21px; cursor: pointer; list-style: none; }
+.body-goals > summary::-webkit-details-marker { display: none; }
+.body-goals > summary span { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: center; }
+.body-goals > summary svg { grid-row: 1 / 3; color: var(--orange); }
+.body-goals > summary small { color: var(--muted); font-size: 8px; }
+.body-goals form { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)) auto; gap: 10px; align-items: end; padding: 17px 21px 21px; border-top: 1px solid var(--line-soft); }
+.body-goals label { display: grid; gap: 6px; color: var(--muted); font-size: 9px; }
+.body-goals label > div { display: flex; align-items: center; gap: 5px; }
+.body-goals input { width: 100%; min-width: 0; min-height: 40px; }
+.body-goals label > div span { color: var(--muted-2); font-size: 8px; }
+.body-history { content-visibility: auto; contain-intrinsic-size: 500px; }
+.measurement-source.manual { color: var(--lime); background: var(--lime-soft); }
+.outlier-note { display: flex !important; align-items: center; gap: 5px; margin-top: 7px !important; color: var(--orange) !important; line-height: 1.4; }
+.outlier-note button { padding: 0; color: var(--blue); border: 0; background: transparent; font-size: inherit; text-decoration: underline; }
+.body-guidance { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.body-guidance > article, .body-guidance > details { padding: 19px; }
+.body-guidance > article { display: flex; gap: 12px; align-items: flex-start; }
+.body-guidance svg { flex: 0 0 auto; color: var(--blue); }
+.body-guidance h3 { margin-bottom: 6px; font-size: 14px; }
+.body-guidance p { margin: 7px 0 0; color: var(--muted); font-size: 9px; line-height: 1.65; }
+.body-guidance summary { cursor: pointer; list-style: none; }
+.body-guidance summary span { display: flex; gap: 9px; align-items: center; }
+.body-guidance a { color: var(--blue); }
+.fitdays-date-review { display: grid; grid-template-columns: minmax(220px,1fr) auto; gap: 16px; align-items: center; margin: 17px 0 8px; padding: 16px; border: 1px solid rgba(131,189,229,.2); border-radius: 14px; background: rgba(131,189,229,.055); }
+.fitdays-date-review > div:first-child { display: grid; gap: 3px; }
+.fitdays-date-review strong { font-size: 16px; }
+.fitdays-date-review span { color: var(--muted); font-size: 8px; }
+.fitdays-date-choices { display: flex; gap: 7px; }
+.fitdays-date-choices button { display: flex; gap: 5px; align-items: center; min-height: 36px; padding: 0 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 9px; background: rgba(5,12,15,.55); font-size: 9px; }
+.fitdays-date-choices button.active { color: var(--lime); border-color: rgba(143,215,181,.35); background: var(--lime-soft); }
+.fitdays-historical-note { display: flex; gap: 9px; align-items: flex-start; margin: 10px 0 16px; padding: 12px 14px; color: var(--orange); border: 1px solid rgba(229,184,120,.22); border-radius: 12px; background: rgba(229,184,120,.06); }
+.fitdays-historical-note p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.fitdays-historical-note strong { display: block; color: var(--text); }
+.profile-derived { display: grid; gap: 5px; padding: 11px 13px; border: 1px solid var(--line-soft); border-radius: 11px; background: rgba(255,255,255,.018); }
+.profile-derived > span { color: var(--muted); font-size: 9px; }
+.profile-derived > strong { font-size: 15px; }
+.profile-derived > small { color: var(--muted-2); font-size: 8px; }
+
+@media (max-width: 1120px) {
+  .body-kpi-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .body-projection { grid-template-columns: 1fr; }
+  .body-goals form { grid-template-columns: 1fr 1fr; }
+  .body-goals form button { grid-column: 1 / -1; justify-content: center; }
+  .projection-path { justify-content: flex-start; overflow-x: auto; padding-bottom: 5px; }
+  .projection-path span { flex: 0 0 130px; }
+}
+
+@media (max-width: 760px) {
+  .body-summary { grid-template-columns: 1fr; padding: 20px; }
+  .body-summary__metrics { grid-template-columns: 1fr 1fr; }
+  .body-summary__metrics span:nth-child(2) { border-right: 0; }
+  .body-summary__metrics span:nth-child(-n+2) { border-bottom: 1px solid var(--line-soft); }
+  .body-kpi-grid, .body-detail-grid, .body-guidance { grid-template-columns: 1fr; }
+  .body-chart-controls, .body-chart-controls > div:last-child { align-items: stretch; flex-direction: column; }
+  .body-chart-controls select { width: 100%; }
+  .body-chart-controls .range-toggle { overflow-x: auto; }
+  .body-chart { height: 285px; }
+  .body-goals form { grid-template-columns: 1fr; }
+  .fitdays-date-review { grid-template-columns: 1fr; }
+  .fitdays-date-choices { display: grid; }
+  .weight-entry { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 470px) {
+  .body-kpi-grid { grid-template-columns: 1fr; }
+  .body-summary__metrics, .secondary-estimates > div { grid-template-columns: 1fr 1fr; }
+  .fat-quality > div:not(.empty-state) { grid-template-columns: 1fr; }
+  .weight-entry { grid-template-columns: 1fr; }
+}
+
 * { box-sizing: border-box; }
 html { min-width: 320px; background: var(--bg); }
 body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 82% -12%, rgba(131, 189, 229, .1), transparent 30%), radial-gradient(circle at 18% 108%, rgba(143, 215, 181, .08), transparent 34%), var(--bg); }
@@ -673,4 +801,16 @@ input:focus, select:focus { border-color: rgba(240,138,120,.7); box-shadow: 0 0 
 
 @media (prefers-reduced-motion: reduce) {
   .fitdays-preview > span, .spin, .fitdays-success > span { animation: none; }
+}
+
+/* Keep the body dashboard's calm category surfaces above the shared card skin. */
+.body-summary.card { background: radial-gradient(circle at 4% 15%, rgba(131,189,229,.13), transparent 36%), linear-gradient(145deg, #162321, #101918); }
+.body-projection.card { background: linear-gradient(115deg, rgba(183,164,227,.07), rgba(131,189,229,.035)), linear-gradient(150deg, rgba(23,34,39,.97), rgba(13,21,25,.985)); }
+.body-kpi.card:nth-child(2), .body-kpi.card:nth-child(5) { border-color: rgba(131,189,229,.14); }
+.body-kpi.card:nth-child(3), .body-kpi.card:nth-child(6) { border-color: rgba(229,184,120,.14); }
+.body-info { display: inline-grid; place-items: center; cursor: help; }
+.body-kpi__position { display: block; margin: -1px 0 5px; color: var(--muted-2); font-size: 8px; }
+
+@media (max-width: 470px) {
+  .progress-page .weight-entry { grid-template-columns: 1fr; }
 }
