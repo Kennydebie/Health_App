@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { AppShell, type Page } from './components/AppShell';
 import { useAppData } from './state/useAppData';
+import type { WorkoutDay } from './types/models';
 
 const HomePage = lazy(() => import('./features/HomePage').then((module) => ({ default: module.HomePage })));
 const FoodPage = lazy(() => import('./features/FoodPage').then((module) => ({ default: module.FoodPage })));
@@ -13,10 +14,11 @@ export default function App() {
   const [page, setPage] = useState<Page>('home');
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
-  const startWorkout = (dayId: 'monday' | 'wednesday' | 'friday') => {
+  const startWorkout = (dayId: WorkoutDay['id']) => {
     const day = controller.data.program.find((item) => item.id === dayId);
-    if (!day) return;
+    if (!day || day.isRestDay) return;
     const sessionId = controller.startWorkout(day);
+    if (!sessionId) return;
     setActiveSessionId(sessionId);
     setPage('workout');
   };

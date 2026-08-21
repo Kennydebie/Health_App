@@ -44,11 +44,11 @@ const demoSessions: WorkoutSession[] = [
 
 export function createSeedData(): AppData {
   return {
-    version: 1,
+    version: 2,
     profile: {
       name: 'Kenny', age: 29, sex: 'male', heightCm: 174, startWeightKg: 83.8, currentWeightKg: 82.6, goalWeightKg: 75,
       calorieTarget: 2100, proteinTarget: 170, carbTarget: 205, fatTarget: 67,
-      trainingDays: ['Monday', 'Wednesday', 'Friday'], units: 'metric',
+      trainingDays: ['Monday', 'Tuesday', 'Thursday', 'Saturday'], units: 'metric',
       equipment: ['Adjustable dumbbells', 'Barbell', 'Bench', 'Dip setup', 'Bodyweight'],
     },
     foodLog,

@@ -1,12 +1,13 @@
-import { ArrowRight, Check, ChevronRight, Clock3, Dumbbell, Flame, Scale, Sparkles, Target, TrendingDown } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, ChevronRight, Clock3, Dumbbell, Flame, HeartPulse, Scale, Sparkles, Target, TrendingDown } from 'lucide-react';
 import { ProgressRing } from '../components/ProgressRing';
 import type { Page } from '../components/AppShell';
 import { exerciseMap } from '../data/exercises';
 import { prettyDate, toDateKey } from '../lib/date';
 import { weightTrend } from '../lib/progress';
 import type { AppController } from '../state/useAppData';
+import type { WorkoutDay } from '../types/models';
 
-interface HomePageProps { controller: AppController; setPage: (page: Page) => void; onStartWorkout: (dayId: 'monday' | 'wednesday' | 'friday') => void; }
+interface HomePageProps { controller: AppController; setPage: (page: Page) => void; onStartWorkout: (dayId: WorkoutDay['id']) => void; }
 
 function coachMessage(calories: number, protein: number, calorieTarget: number, proteinTarget: number, weeklyChange: number) {
   const remaining = calorieTarget - calories;
@@ -29,7 +30,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
     const todayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()).toLowerCase();
     return day.id === todayName;
   }) ?? data.program[0];
-  const completedToday = data.sessions.some((session) => session.date === today && session.dayId === workoutDay.id && session.completedAt);
+  const completedToday = !workoutDay.isRestDay && data.sessions.some((session) => session.date === today && session.dayId === workoutDay.id && session.completedAt);
   const coach = coachMessage(totals.calories, totals.protein, profile.calorieTarget, profile.proteinTarget, trend.weeklyChange);
   const caloriesRemaining = profile.calorieTarget - totals.calories;
   const proteinRemaining = profile.proteinTarget - totals.protein;
@@ -75,10 +76,8 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
         </article>
 
         <article className="card workout-today">
-          <div className="section-title"><div><p className="eyebrow">Today's training</p><h3>{workoutDay.title}</h3></div><span className={completedToday ? 'pill success' : 'pill'}>{completedToday ? 'Completed' : 'Programmed'}</span></div>
-          <div className="workout-meta"><span><Clock3 size={16} /> {workoutDay.duration}</span><span><Dumbbell size={16} /> {workoutDay.exercises.length} exercises</span></div>
-          <div className="exercise-preview">{workoutDay.exercises.slice(0, 4).map((item, index) => <div key={item.exerciseId}><span>{String(index + 1).padStart(2, '0')}</span><p>{exerciseMap.get(item.exerciseId)?.name}<small>{item.sets} × {item.repMin}–{item.repMax}</small></p></div>)}</div>
-          <button type="button" className="primary-button" onClick={() => completedToday ? setPage('workout') : onStartWorkout(workoutDay.id)}>{completedToday ? <Check size={18} /> : <Flame size={18} />}{completedToday ? 'View workout' : 'Start workout'}</button>
+          <div className="section-title"><div><p className="eyebrow">{workoutDay.isRestDay ? "Today's recovery" : "Today's training"}</p><h3>{workoutDay.title}</h3></div><span className={completedToday ? 'pill success' : `pill ${workoutDay.isRestDay ? 'recovery' : ''}`}>{completedToday ? 'Completed' : workoutDay.isRestDay ? 'Rest day' : 'Programmed'}</span></div>
+          {workoutDay.isRestDay ? <><div className="workout-meta"><span><HeartPulse size={16} /> No lifting today</span><span><Clock3 size={16} /> Recovery is part of the plan</span></div><div className="exercise-preview recovery-preview">{workoutDay.recovery?.slice(0, 3).map((item) => <div key={item}><span><Check size={14} /></span><p>{item}</p></div>)}</div><button type="button" className="primary-button" onClick={() => setPage('workout')}><CalendarDays size={18} /> View weekly schedule</button></> : <><div className="workout-meta"><span><Clock3 size={16} /> {workoutDay.duration}</span><span><Dumbbell size={16} /> {workoutDay.exercises.length} exercises</span></div><div className="exercise-preview">{workoutDay.exercises.slice(0, 4).map((item, index) => <div key={item.exerciseId}><span>{String(index + 1).padStart(2, '0')}</span><p>{exerciseMap.get(item.exerciseId)?.name}<small>{item.sets} × {item.repMin}–{item.repMax}</small></p></div>)}</div><button type="button" className="primary-button" onClick={() => completedToday ? setPage('workout') : onStartWorkout(workoutDay.id)}>{completedToday ? <Check size={18} /> : <Flame size={18} />}{completedToday ? 'View workout' : 'Start workout'}</button></>}
         </article>
 
         <article className="card weight-card">

@@ -73,7 +73,7 @@ export interface Exercise {
   mistakes: string[];
   safety: string;
   alternatives: string[];
-  demoUrl: string;
+  videoId: string;
 }
 
 export interface ProgramExercise {
@@ -86,10 +86,12 @@ export interface ProgramExercise {
 }
 
 export interface WorkoutDay {
-  id: 'monday' | 'wednesday' | 'friday';
+  id: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
   label: string;
   title: string;
   duration: string;
+  isRestDay: boolean;
+  recovery?: string[];
   exercises: ProgramExercise[];
 }
 

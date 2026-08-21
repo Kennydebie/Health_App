@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, BadgeCheck, BarChart3, Check, ChevronRight, Clock3, Dumbbell, ExternalLink, Flame, GripVertical, History, Pause, Pencil, Play, Plus, RotateCcw, Save, ShieldCheck, SkipForward, Sparkles, Trophy, X } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, BarChart3, BedDouble, CalendarDays, Check, ChevronRight, Clock3, Dumbbell, ExternalLink, Flame, Footprints, GripVertical, HeartPulse, History, Pause, Pencil, Play, Plus, RotateCcw, Save, ShieldCheck, SkipForward, Sparkles, Trophy, X } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { exerciseMap, exercises } from '../data/exercises';
 import { prettyDate, toDateKey } from '../lib/date';
@@ -31,8 +31,15 @@ function ExerciseDetail({ exercise, onClose }: { exercise: Exercise; onClose: ()
     <Modal open onClose={onClose} title={exercise.name} subtitle={`${exercise.primaryMuscles.join(' · ')} — technique and safety`} wide>
       <div className="exercise-detail">
         <div className="demo-panel">
-          <div><Play size={32} /><span>Technique demonstration</span></div>
-          <a href={exercise.demoUrl} target="_blank" rel="noreferrer">Watch technique demo <ExternalLink size={17} /></a>
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${exercise.videoId}?rel=0`}
+            title={`${exercise.name} technique demonstration`}
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+          <footer><span><Play size={16} /> Exercise-specific technique video</span><a href={`https://www.youtube.com/watch?v=${exercise.videoId}`} target="_blank" rel="noreferrer">Open on YouTube <ExternalLink size={15} /></a></footer>
         </div>
         <div className="muscle-tags"><span>Primary</span>{exercise.primaryMuscles.map((muscle) => <strong key={muscle}>{muscle}</strong>)}<span>Secondary</span>{exercise.secondaryMuscles.map((muscle) => <em key={muscle}>{muscle}</em>)}</div>
         <div className="detail-columns">
@@ -146,25 +153,30 @@ function WorkoutHistory({ sessions, onOpen }: { sessions: WorkoutSession[]; onOp
 export function WorkoutPage({ controller, activeSessionId, setActiveSessionId, onStartWorkout }: WorkoutPageProps) {
   const fallbackActive = [...controller.data.sessions].reverse().find((session) => !session.completedAt);
   const activeSession = controller.data.sessions.find((session) => session.id === activeSessionId) ?? fallbackActive;
-  const [selectedDayId, setSelectedDayId] = useState<WorkoutDay['id']>('monday');
+  const [selectedDayId, setSelectedDayId] = useState<WorkoutDay['id']>(() => new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()).toLowerCase() as WorkoutDay['id']);
   const [view, setView] = useState<'program' | 'history'>('program');
   const [details, setDetails] = useState<Exercise | null>(null);
   const [editingDay, setEditingDay] = useState<WorkoutDay | null>(null);
   const [historySession, setHistorySession] = useState<WorkoutSession | null>(null);
   const [hideActiveSession, setHideActiveSession] = useState(false);
   const day = controller.data.program.find((item) => item.id === selectedDayId)!;
+  const selectedIndex = controller.data.program.findIndex((item) => item.id === selectedDayId);
+  const nextTrainingDay = [...controller.data.program.slice(selectedIndex + 1), ...controller.data.program.slice(0, selectedIndex + 1)].find((item) => !item.isRestDay);
   const today = toDateKey();
   const previousCompleted = controller.data.sessions.filter((session) => session.completedAt);
 
   if (activeSession && !activeSession.completedAt && !hideActiveSession) return <ActiveWorkout controller={controller} session={activeSession} onBack={() => setHideActiveSession(true)} onFinished={() => { setActiveSessionId(null); setHideActiveSession(true); setView('history'); }} />;
 
   return <div className="page workout-page">
-    <header className="page-header workout-header"><div><p className="eyebrow">Strength plan</p><h1>Keep the muscle.</h1><p>Three focused sessions. Add reps before load; let form govern progression.</p></div><div className="view-toggle"><button type="button" className={view === 'program' ? 'active' : ''} onClick={() => setView('program')}><Dumbbell size={17} /> Program</button><button type="button" className={view === 'history' ? 'active' : ''} onClick={() => setView('history')}><History size={17} /> History</button></div></header>
+    <header className="page-header workout-header"><div><p className="eyebrow">Seven-day strength plan</p><h1>Keep the muscle.</h1><p>Four focused lifting days, three recovery days, and every major muscle group trained twice weekly.</p></div><div className="view-toggle"><button type="button" className={view === 'program' ? 'active' : ''} onClick={() => setView('program')}><Dumbbell size={17} /> Program</button><button type="button" className={view === 'history' ? 'active' : ''} onClick={() => setView('history')}><History size={17} /> History</button></div></header>
     {view === 'program' ? <>
       {activeSession && !activeSession.completedAt ? <button type="button" className="resume-banner" onClick={() => setHideActiveSession(false)}><Play size={18} /><span><strong>{activeSession.title} is in progress</strong><small>{activeSession.sets.filter((set) => set.completed).length} of {activeSession.sets.length} sets complete</small></span><ChevronRight size={18} /></button> : null}
-      <section className="day-tabs" aria-label="Workout days">{controller.data.program.map((item) => { const completed = controller.data.sessions.some((session) => session.dayId === item.id && session.completedAt && session.date === today); return <button type="button" key={item.id} className={selectedDayId === item.id ? 'active' : ''} onClick={() => setSelectedDayId(item.id)}><span>{item.label}</span><strong>{item.title}</strong><small>{completed ? <><BadgeCheck size={14} /> Completed</> : selectedDayId === item.id ? 'Current workout' : 'Upcoming'}</small></button>; })}</section>
-      <section className="program-layout">
-        <article className="program-main card"><header><div><p className="eyebrow">{day.label} session</p><h2>{day.title}</h2><span><Clock3 size={16} /> {day.duration} · {day.exercises.length} exercises</span></div><button type="button" className="secondary-button" onClick={() => setEditingDay(day)}><Pencil size={16} /> Edit program</button></header>
+      <section className="day-tabs" aria-label="Weekly workout schedule">{controller.data.program.map((item) => { const completed = !item.isRestDay && controller.data.sessions.some((session) => session.dayId === item.id && session.completedAt && session.date === today); const isSelected = selectedDayId === item.id; return <button type="button" key={item.id} aria-current={isSelected ? 'date' : undefined} className={`${isSelected ? 'active' : ''} ${item.isRestDay ? 'rest-day' : 'training-day'}`} onClick={() => setSelectedDayId(item.id)}><span>{item.label}</span><strong>{item.title}</strong><small>{completed ? <><BadgeCheck size={14} /> Completed</> : item.isRestDay ? 'Recovery day' : isSelected ? 'Selected session' : 'Training day'}</small></button>; })}</section>
+      <section className={`program-layout ${day.isRestDay ? 'rest-layout' : ''}`}>
+        {day.isRestDay ? <article className="program-main recovery-main card"><header><div><p className="eyebrow">{day.label} recovery</p><h2>{day.title}</h2><span><HeartPulse size={16} /> No lifting scheduled</span></div><span className="recovery-badge">Rest day</span></header>
+          <div className="recovery-plan"><span className="recovery-orb"><HeartPulse size={26} /></span><div><p className="eyebrow">Today’s objective</p><h3>Recover without turning rest into another workout.</h3><p>The adaptation happens between sessions. Keep optional movement easy enough that you feel better afterward.</p></div><ul>{day.recovery?.map((item) => <li key={item}><Check size={16} />{item}</li>)}</ul></div>
+          {nextTrainingDay ? <button type="button" className="secondary-button next-session" onClick={() => setSelectedDayId(nextTrainingDay.id)}><CalendarDays size={18} /> Next: {nextTrainingDay.label} · {nextTrainingDay.title}<ChevronRight size={17} /></button> : null}
+        </article> : <article className="program-main card"><header><div><p className="eyebrow">{day.label} session</p><h2>{day.title}</h2><span><Clock3 size={16} /> {day.duration} · {day.exercises.length} exercises</span></div><button type="button" className="secondary-button" onClick={() => setEditingDay(day)}><Pencil size={16} /> Edit program</button></header>
           <div className="program-list">{day.exercises.map((item, index) => {
             const exercise = exerciseMap.get(item.exerciseId)!;
             const previous = previousSets(previousCompleted, item.exerciseId);
@@ -172,10 +184,9 @@ export function WorkoutPage({ controller, activeSessionId, setActiveSessionId, o
             return <div className="program-exercise" key={`${item.exerciseId}-${index}`}><span className="exercise-index">{String(index + 1).padStart(2, '0')}</span><button type="button" className="program-exercise__main" onClick={() => setDetails(exercise)}><div><h3>{exercise.name}</h3><p>{exercise.primaryMuscles.join(' · ')}</p></div><div className="prescription"><strong>{item.sets} × {item.repMin}–{item.repMax}</strong><span>{formatDuration(item.restSeconds)} rest · {item.rir} RIR</span></div>{best ? <div className="last-load"><strong>{best} kg</strong><span>recent best</span></div> : <div className="last-load"><strong>—</strong><span>no history</span></div>}<ChevronRight size={19} /></button></div>;
           })}</div>
           <button type="button" className="primary-button start-workout" onClick={() => activeSession && !activeSession.completedAt ? setHideActiveSession(false) : onStartWorkout(day.id)}><Flame size={19} /> {activeSession && !activeSession.completedAt ? 'Resume active workout' : `Start ${day.title}`}</button>
-        </article>
+        </article>}
         <aside className="workout-guidance">
-          <article className="card overload-card"><span className="metric-icon lime"><BarChart3 size={19} /></span><p className="eyebrow">Progressive overload</p><h3>Earn the increase.</h3><p>Reach the top of the rep range across all working sets at the planned effort before adding load.</p><div><Sparkles size={16} /> Reps → load → repeat</div></article>
-          <article className="card squat-card"><p className="eyebrow">Balance-first squat path</p><h3>Control before load</h3><ol><li>Assisted squat</li><li>Box squat</li><li>Supported goblet squat</li><li>Goblet squat</li><li>Split squat</li></ol><button type="button" className="text-button" onClick={() => setDetails(exerciseMap.get('goblet-squat')!)}>Open squat guide <ChevronRight size={17} /></button></article>
+          {day.isRestDay ? <><article className="card overload-card"><span className="metric-icon lime"><BedDouble size={19} /></span><p className="eyebrow">Recovery is programmed</p><h3>Nothing to make up.</h3><p>Rest days are part of the four-day split. Missing the urge to add hard cardio is not missing training.</p><div><Sparkles size={16} /> Recover → adapt → train</div></article><article className="card squat-card"><span className="metric-icon blue"><Footprints size={19} /></span><p className="eyebrow">Optional movement</p><h3>Easy means easy</h3><p>A relaxed walk or short mobility session is enough. Stop before it adds fatigue.</p></article></> : <><article className="card overload-card"><span className="metric-icon lime"><BarChart3 size={19} /></span><p className="eyebrow">Progressive overload</p><h3>Earn the increase.</h3><p>Reach the top of the rep range across all working sets at the planned effort before adding load.</p><div><Sparkles size={16} /> Reps → load → repeat</div></article><article className="card squat-card"><p className="eyebrow">Balance-first squat path</p><h3>Control before load</h3><ol><li>Assisted squat</li><li>Box squat</li><li>Supported goblet squat</li><li>Goblet squat</li><li>Split squat</li></ol><button type="button" className="text-button" onClick={() => setDetails(exerciseMap.get('goblet-squat')!)}>Open squat guide <ChevronRight size={17} /></button></article></>}
         </aside>
       </section>
     </> : <WorkoutHistory sessions={controller.data.sessions} onOpen={setHistorySession} />}

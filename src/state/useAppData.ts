@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createSeedData } from '../data/seed';
+import { defaultProgram } from '../data/exercises';
 import { foodMap } from '../data/foods';
 import { addMacros, entryMacros } from '../lib/nutrition';
 import { uid } from '../lib/id';
@@ -7,10 +8,20 @@ import type { AppData, FoodLogEntry, HabitEntry, LoggedSet, MealType, UserProfil
 
 const STORAGE_KEY = 'cut-forward-data-v1';
 
+export function migrateAppData(saved: AppData): AppData {
+  if (saved.version >= 2 && saved.program.length === 7) return saved;
+  return {
+    ...saved,
+    version: 2,
+    profile: { ...saved.profile, trainingDays: ['Monday', 'Tuesday', 'Thursday', 'Saturday'] },
+    program: structuredClone(defaultProgram),
+  };
+}
+
 function loadData(): AppData {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved) as AppData;
+    if (saved) return migrateAppData(JSON.parse(saved) as AppData);
   } catch {
     // Fall through to safe seed data if storage is corrupted or unavailable.
   }
@@ -76,6 +87,7 @@ export function useAppData() {
   const updateProgramDay = useCallback((day: WorkoutDay) => update((current) => ({ ...current, program: current.program.map((item) => item.id === day.id ? day : item) })), [update]);
 
   const startWorkout = useCallback((day: WorkoutDay) => {
+    if (day.isRestDay || day.exercises.length === 0) return null;
     const previousCompleted = data.sessions.filter((session) => session.completedAt).flatMap((session) => session.sets).filter((set) => set.completed);
     const sets: LoggedSet[] = day.exercises.flatMap((exercise) => {
       const previous = previousCompleted.filter((set) => set.exerciseId === exercise.exerciseId).slice(-exercise.sets);

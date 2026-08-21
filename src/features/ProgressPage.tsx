@@ -30,6 +30,7 @@ export function ProgressPage({ controller }: ProgressPageProps) {
   const withinTarget = currentTotals.filter((item) => item.calories > 0 && item.calories <= data.profile.calorieTarget + 100).length;
   const proteinDays = currentTotals.filter((item) => item.protein >= data.profile.proteinTarget * 0.95).length;
   const completedWorkouts = data.sessions.filter((session) => session.completedAt && last7.includes(session.date)).length;
+  const plannedWorkouts = data.program.filter((day) => !day.isRestDay).length;
   const previousAvgWeight = trend.previousAverage;
   const weightChange = trend.weeklyChange;
 
@@ -39,7 +40,7 @@ export function ProgressPage({ controller }: ProgressPageProps) {
       ? 'Weight is nearly flat while logged calories average near target. Keep the plan for one more week; reduce by 100–150 kcal only if accurate adherence and the stall continue.'
       : weightChange < -0.8
         ? 'Weight is falling quickly. Protect training quality and protein; an unnecessarily aggressive deficit can cost performance and lean mass.'
-        : `This week is mixed. Keep calories near ${data.profile.calorieTarget} and make protein plus all three training sessions the priority.`;
+        : `This week is mixed. Keep calories near ${data.profile.calorieTarget} and make protein plus all ${plannedWorkouts} training sessions the priority.`;
 
   const exerciseHistory = data.sessions.filter((session) => session.completedAt).flatMap((session) => {
     const sets = session.sets.filter((set) => set.completed && set.exerciseId === exerciseId);
@@ -58,7 +59,7 @@ export function ProgressPage({ controller }: ProgressPageProps) {
       <article className="metric-card"><span className="metric-icon blue"><Scale size={19} /></span><p>7-day average</p><strong>{trend.currentAverage.toFixed(1)} <small>kg</small></strong><span>Current signal</span></article>
       <article className="metric-card"><span className="metric-icon lime"><TrendingDown size={19} /></span><p>Weekly trend</p><strong>{weightChange > 0 ? '+' : ''}{weightChange.toFixed(2)} <small>kg</small></strong><span>{weightChange <= -0.2 ? 'Productive rate' : 'Monitor'}</span></article>
       <article className="metric-card"><span className="metric-icon orange"><Target size={19} /></span><p>Goal progress</p><strong>{Math.round(weightProgress)}<small>%</small></strong><span>{Math.max(0, trend.currentAverage - data.profile.goalWeightKg).toFixed(1)} kg to goal</span></article>
-      <article className="metric-card"><span className="metric-icon purple"><Dumbbell size={19} /></span><p>Training</p><strong>{completedWorkouts}<small> / 3</small></strong><span>Last 7 days</span></article>
+      <article className="metric-card"><span className="metric-icon purple"><Dumbbell size={19} /></span><p>Training</p><strong>{completedWorkouts}<small> / {plannedWorkouts}</small></strong><span>Last 7 days</span></article>
     </section>
 
     <section className="progress-layout">
@@ -68,7 +69,7 @@ export function ProgressPage({ controller }: ProgressPageProps) {
       </article>
 
       <article className="card weekly-review"><div className="section-title"><div><p className="eyebrow">Weekly check-in</p><h2>Plan quality</h2></div><span>Last 7 days</span></div>
-        <div className="review-table"><div><span>Weight average</span><strong>{trend.currentAverage.toFixed(1)} kg</strong><small>vs {previousAvgWeight.toFixed(1)} kg</small></div><div><span>Average calories</span><strong>{Math.round(averageCalories).toLocaleString()} kcal</strong><small>{withinTarget} days controlled</small></div><div><span>Average protein</span><strong>{Math.round(averageProtein)} g</strong><small>{proteinDays} days on target</small></div><div><span>Training</span><strong>{completedWorkouts} / 3</strong><small>planned sessions</small></div></div>
+        <div className="review-table"><div><span>Weight average</span><strong>{trend.currentAverage.toFixed(1)} kg</strong><small>vs {previousAvgWeight.toFixed(1)} kg</small></div><div><span>Average calories</span><strong>{Math.round(averageCalories).toLocaleString()} kcal</strong><small>{withinTarget} days controlled</small></div><div><span>Average protein</span><strong>{Math.round(averageProtein)} g</strong><small>{proteinDays} days on target</small></div><div><span>Training</span><strong>{completedWorkouts} / {plannedWorkouts}</strong><small>planned sessions</small></div></div>
         <div className="weekly-coach"><Sparkles size={21} /><p><strong>Coach conclusion</strong>{weeklyCoach}</p></div>
       </article>
     </section>
