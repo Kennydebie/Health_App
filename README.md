@@ -36,7 +36,7 @@ Tests cover data migration, account repository behavior, idempotent conflict-saf
 
 ## Deployment and configuration
 
-The Sites project ID and D1 binding are declared in `.openai/hosting.json`; the D1 migration lives in `.openai/drizzle/`. No client-side environment variable is required for persistence.
+The Sites project ID and D1 binding are declared in `.openai/hosting.json`; the source D1 migration lives in `drizzle/` and is packaged into `dist/.openai/drizzle/`. No client-side environment variable is required for persistence.
 
 Server secrets:
 
