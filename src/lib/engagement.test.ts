@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSeedData } from '../data/seed';
+import { recalculateTrainingWeek } from './adaptivePlanner';
 import { activePlanWeek, dailyScore, datesInWeek, displayWorkoutTitle, getWeekSnapshot, personalRecordEvents, trainingWeekStreak, weeklyConsistency } from './engagement';
 
 describe('engagement helpers', () => {
@@ -36,8 +37,8 @@ describe('engagement helpers', () => {
     data.foodLog = [];
     data.cardioLog = [];
     const week = getWeekSnapshot(data, '2026-08-21');
-    expect(week.days[0]).toMatchObject({ date: '2026-08-17', status: 'completed' });
-    expect(week.days[0].completedSession?.id).toBe('renamed');
+    expect(week.days[4]).toMatchObject({ date: '2026-08-21', status: 'completed' });
+    expect(week.days[4].completedSession?.id).toBe('renamed');
     expect(week.completedStrength).toBe(1);
     expect(weeklyConsistency(data, '2026-08-21').strength).toBe(1);
   });
@@ -52,6 +53,7 @@ describe('engagement helpers', () => {
     const data = createSeedData();
     data.sessions = [];
     data.cardioLog = [];
+    data.trainingPlanner = recalculateTrainingWeek(data, '2026-08-18', new Date('2026-08-18T12:00:00'));
     const week = getWeekSnapshot(data, '2026-08-18');
     expect(week.days[0].status).toBe('missed');
     expect(week.days[1].status).toBe('today');

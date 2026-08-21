@@ -1,6 +1,7 @@
 import { defaultProgram } from './exercises';
 import { shiftDate, toDateKey } from '../lib/date';
 import { DEFAULT_BODY_GOALS } from '../lib/bodyMeasurements';
+import { DEFAULT_TRAINING_PLANNER } from '../lib/adaptivePlanner';
 import type { AppData, BodyMeasurement, FoodLogEntry, WorkoutSession } from '../types/models';
 
 const now = new Date().toISOString();
@@ -69,7 +70,7 @@ const demoSessions: WorkoutSession[] = [
 
 export function createSeedData(): AppData {
   return {
-    version: 7,
+    version: 8,
     profile: {
       name: 'Kenny', age: 29, sex: 'male', heightCm: 174, goalWeightKg: 75,
       calorieTarget: 2100, proteinTarget: 170, carbTarget: 205, fatTarget: 67,
@@ -89,6 +90,7 @@ export function createSeedData(): AppData {
     measurements: structuredClone(measurements),
     bodyGoals: structuredClone(DEFAULT_BODY_GOALS),
     program: structuredClone(defaultProgram),
+    trainingPlanner: structuredClone(DEFAULT_TRAINING_PLANNER),
     sessions: structuredClone(demoSessions),
     habits: [{ date: today, water: false, walk: false, sleep: true }],
     cardioLog: [],

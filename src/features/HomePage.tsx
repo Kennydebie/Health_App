@@ -9,10 +9,11 @@ import { prettyDate, toDateKey } from '../lib/date';
 import { activePlanWeek, dailyScore, displayWorkoutTitle, getWeekSnapshot, weeklyConsistency } from '../lib/engagement';
 import { weightTrend } from '../lib/progress';
 import { rollingWeightSeries } from '../lib/bodyMeasurements';
+import { plannerWarnings } from '../lib/adaptivePlanner';
 import type { AppController } from '../state/useAppData';
-import type { WorkoutDay } from '../types/models';
+import type { SessionTemplateId } from '../types/models';
 
-interface HomePageProps { controller: AppController; setPage: (page: Page) => void; onStartWorkout: (dayId: WorkoutDay['id']) => void; }
+interface HomePageProps { controller: AppController; setPage: (page: Page) => void; onStartWorkout: (templateId: SessionTemplateId, date?: string) => void; }
 
 function coachMessage(calories: number, protein: number, calorieTarget: number, proteinTarget: number, weeklyChange: number) {
   const remaining = calorieTarget - calories;
@@ -31,10 +32,12 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
   const profile = data.profile;
   const trend = weightTrend(data.measurements);
   const todayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()).toLowerCase();
-  const workoutDay = data.program.find((day) => day.id === todayName) ?? data.program[0];
   const activeSession = [...data.sessions].reverse().find((session) => !session.completedAt);
   const weekSnapshot = getWeekSnapshot(data, today);
   const todayPlan = weekSnapshot.days.find((item) => item.date === today);
+  const workoutDay = todayPlan?.day ?? data.program.find((day) => day.id === todayName) ?? data.program[0];
+  const selectedTemplateId = todayPlan?.plan?.selectedSessionTemplateId ?? workoutDay.workoutId ?? 'cardio_recovery';
+  const startWarnings = plannerWarnings(data, today, selectedTemplateId, todayPlan?.plan?.readinessResponse);
   const completedToday = !workoutDay.isRestDay && todayPlan?.status === 'completed';
   const cardioToday = data.cardioLog.filter((entry) => entry.date === today).reduce((sum, entry) => sum + entry.minutes, 0);
   const coach = coachMessage(totals.calories, totals.protein, profile.calorieTarget, profile.proteinTarget, trend.weeklyChange);
@@ -67,7 +70,9 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
   const action = activeSession
     ? { label: 'Continue workout', Icon: Play, run: () => setPage('workout') }
     : !workoutDay.isRestDay && !completedToday
-      ? { label: `Start ${displayWorkoutTitle(workoutDay)}`, Icon: Flame, run: () => onStartWorkout(workoutDay.id) }
+      ? startWarnings.length
+        ? { label: `Review ${displayWorkoutTitle(workoutDay)}`, Icon: Flame, run: () => setPage('workout') }
+        : { label: `Start ${displayWorkoutTitle(workoutDay)}`, Icon: Flame, run: () => onStartWorkout(selectedTemplateId, today) }
       : workoutDay.isRestDay
         ? { label: 'View today’s recovery', Icon: HeartPulse, run: () => setPage('workout') }
         : { label: 'Log your next meal', Icon: Utensils, run: () => setPage('food') };
@@ -80,7 +85,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
         <div className="daily-command__meta"><span>Plan week {week}</span><span>{prettyDate(today, true)}</span></div>
         <p className="eyebrow">Project 75 · {profile.goalWeightKg} kg mission</p>
         <h1>Good morning, {profile.name}.</h1>
-        <p className="daily-objective">Today’s objective: <strong>{workoutDay.isRestDay ? 'recover, move, and stay consistent' : `${displayWorkoutTitle(workoutDay).toLowerCase()} with controlled effort`}</strong>.</p>
+        <p className="daily-objective">Today’s recommendation: <strong>{workoutDay.isRestDay ? displayWorkoutTitle(workoutDay).toLowerCase() : `${displayWorkoutTitle(workoutDay).toLowerCase()} with controlled effort`}</strong>. {todayPlan?.plan?.recommendationReason}</p>
         <button className="primary-button command-action" type="button" onClick={action.run}><ActionIcon size={19} /> {action.label}<ArrowRight size={18} /></button>
       </div>
       <div className="daily-score">

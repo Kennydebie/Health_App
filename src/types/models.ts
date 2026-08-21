@@ -157,6 +157,52 @@ export type MovementPattern = 'Horizontal push' | 'Horizontal pull' | 'Vertical 
 export type TrainingTemplate = 'two-day-full-body' | 'three-day-full-body' | 'four-day-upper-lower';
 export type SquatProgressionLevel = 'assisted-squat' | 'box-squat' | 'supported-goblet-squat' | 'goblet-squat' | 'supported-split-squat' | 'split-squat' | 'bulgarian-split-squat';
 export type WorkoutId = 'upper_a' | 'lower_a' | 'upper_b' | 'lower_b' | 'full_body_a' | 'full_body_b' | 'full_body_c' | `legacy_${string}`;
+export type SessionTemplateId = WorkoutId | 'cardio_recovery' | 'mobility_recovery' | 'full_rest';
+export type TrainingSelectionSource = 'default_template' | 'adaptive_recommendation' | 'user_selected' | 'user_moved' | 'user_swapped';
+export type TrainingDayStatus = 'recommended' | 'selected' | 'completed' | 'skipped' | 'missed' | 'rest';
+
+export interface ReadinessResponse {
+  energy: 1 | 2 | 3 | 4 | 5;
+  muscleSoreness: 1 | 2 | 3 | 4 | 5;
+  jointDiscomfort: 'none' | 'mild' | 'significant';
+  availableMinutes: number;
+  preferredIntensity: 'light' | 'normal' | 'hard';
+  recordedAt: string;
+}
+
+export interface TrainingDayPlan {
+  date: string;
+  recommendedSessionTemplateId: SessionTemplateId;
+  selectedSessionTemplateId: SessionTemplateId;
+  selectionSource: TrainingSelectionSource;
+  recommendationReason: string;
+  recommendationCreatedAt: string;
+  status: TrainingDayStatus;
+  completedWorkoutId?: string;
+  completedAt?: string;
+  overrideWarningShown: boolean;
+  readinessResponse?: ReadinessResponse;
+}
+
+export interface RecoveryHeuristics {
+  strongWarningHours: number;
+  cautionHours: number;
+  heavyWorkingSetThreshold: number;
+}
+
+export interface WeeklyTrainingTargets {
+  upperSessions: number;
+  lowerSessions: number;
+  strengthSessions: number;
+  recoveryOpportunities: number;
+}
+
+export interface TrainingPlannerState {
+  version: 1;
+  dailyPlans: TrainingDayPlan[];
+  recoveryHeuristics: RecoveryHeuristics;
+  weeklyTargets: WeeklyTrainingTargets;
+}
 
 export interface ExercisePrescription {
   sets: number;
@@ -248,6 +294,7 @@ export interface AppData {
   measurements: BodyMeasurement[];
   bodyGoals: BodyGoalSettings;
   program: WorkoutDay[];
+  trainingPlanner: TrainingPlannerState;
   sessions: WorkoutSession[];
   habits: HabitEntry[];
   cardioLog: CardioEntry[];

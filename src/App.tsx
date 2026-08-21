@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { AppShell, type Page } from './components/AppShell';
 import { useAppData } from './state/useAppData';
-import type { WorkoutDay } from './types/models';
+import type { SessionTemplateId } from './types/models';
 import { PageSkeleton } from './components/Visuals';
 import { activePlanWeek, trainingWeekStreak } from './lib/engagement';
 
@@ -22,10 +22,8 @@ export default function App() {
     setPage(nextPage);
   };
 
-  const startWorkout = (dayId: WorkoutDay['id']) => {
-    const day = controller.data.program.find((item) => item.id === dayId);
-    if (!day || day.isRestDay) return;
-    const sessionId = controller.startWorkout(day);
+  const startWorkout = (templateId: SessionTemplateId, date?: string) => {
+    const sessionId = controller.startWorkoutTemplate(templateId, date);
     if (!sessionId) return;
     setActiveSessionId(sessionId);
     setPage('workout');

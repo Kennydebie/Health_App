@@ -1,6 +1,7 @@
 import { exerciseMap } from '../data/exercises';
 import { shiftDate, toDateKey } from './date';
 import { workoutVolume } from './progress';
+import { isStrengthTemplate, workoutDayForSession } from './adaptivePlanner';
 import type { AppData, BodyMeasurement, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 const workoutDisplayNames: Partial<Record<WorkoutId, string>> = {
@@ -40,6 +41,7 @@ export type PlanDayStatus = 'completed' | 'today' | 'upcoming' | 'skipped' | 'mi
 export interface WeekPlanDay {
   date: string;
   day?: WorkoutDay;
+  plan?: AppData['trainingPlanner']['dailyPlans'][number];
   status: PlanDayStatus;
   completedSession?: WorkoutSession;
   cardioMinutes: number;
@@ -58,24 +60,24 @@ export interface WeekSnapshot {
 /** One source of truth for schedule cards, summaries, CTAs and progress metrics. */
 export function getWeekSnapshot(data: AppData, reference = toDateKey()): WeekSnapshot {
   const dates = datesInWeek(reference);
-  const sessions = data.sessions.filter((session) => session.completedAt && dates.includes(session.date) && session.date <= reference);
+  const sessions = data.sessions.filter((session) => session.completedAt && dates.includes(session.date) && session.date <= reference && session.sets.some((set) => set.completed && !set.isWarmup));
   const cardioByDate = new Map<string, number>();
   for (const entry of data.cardioLog.filter((item) => dates.includes(item.date) && item.date <= reference)) {
     cardioByDate.set(entry.date, (cardioByDate.get(entry.date) ?? 0) + entry.minutes);
   }
-  const usedSessionIds = new Set<string>();
   const days = dates.map((date, index): WeekPlanDay => {
-    const day = data.program[index];
-    if (!day) return { date, status: 'not-scheduled', cardioMinutes: cardioByDate.get(date) ?? 0 };
+    const plan = data.trainingPlanner.dailyPlans.find((item) => item.date === date);
+    const completedSession = sessions.filter((session) => session.date === date).at(-1);
+    const templateId = completedSession?.workoutId ?? plan?.selectedSessionTemplateId;
+    const fallbackDay = data.program[index];
+    const day = templateId ? workoutDayForSession(data.program, templateId, date) : fallbackDay;
+    if (!day) return { date, status: 'not-scheduled', cardioMinutes: cardioByDate.get(date) ?? 0, plan };
     const cardioMinutes = cardioByDate.get(date) ?? 0;
-    let completedSession: WorkoutSession | undefined;
-    if (!day.isRestDay && day.workoutId) {
-      completedSession = sessions.find((session) => !usedSessionIds.has(session.id) && session.workoutId === day.workoutId);
-      if (completedSession) usedSessionIds.add(completedSession.id);
-    }
-    const completed = day.isRestDay ? cardioMinutes > 0 : Boolean(completedSession);
+    const completed = Boolean(completedSession) || day.isRestDay && cardioMinutes > 0;
     const status: PlanDayStatus = completed
       ? 'completed'
+      : plan?.status === 'skipped'
+        ? 'skipped'
       : date === reference
         ? 'today'
         : date > reference
@@ -83,14 +85,14 @@ export function getWeekSnapshot(data: AppData, reference = toDateKey()): WeekSna
           : day.isRestDay
             ? 'skipped'
             : 'missed';
-    return { date, day, status, completedSession, cardioMinutes };
+    return { date, day, plan, status, completedSession, cardioMinutes };
   });
   const elapsedDates = dates.filter((date) => date <= reference);
   return {
     days,
-    completedStrength: days.filter((item) => !item.day?.isRestDay && item.status === 'completed').length,
-    dueStrength: days.filter((item) => !item.day?.isRestDay && item.date <= reference).length,
-    plannedStrength: data.program.filter((day) => !day.isRestDay).length,
+    completedStrength: sessions.length,
+    dueStrength: days.filter((item) => item.plan && isStrengthTemplate(item.plan.selectedSessionTemplateId) && item.date <= reference).length,
+    plannedStrength: data.trainingPlanner.weeklyTargets.strengthSessions,
     cardioMinutes: [...cardioByDate.values()].reduce((sum, minutes) => sum + minutes, 0),
     nutritionDays: new Set(data.foodLog.filter((entry) => elapsedDates.includes(entry.date)).map((entry) => entry.date)).size,
     elapsedDays: elapsedDates.length,

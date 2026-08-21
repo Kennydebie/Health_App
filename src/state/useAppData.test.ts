@@ -19,7 +19,7 @@ describe('app data migration', () => {
 
     const migrated = migrateAppData(saved);
 
-    expect(migrated.version).toBe(7);
+    expect(migrated.version).toBe(8);
     expect(migrated.program).toHaveLength(7);
     expect(migrated.program.filter((day) => !day.isRestDay).map((day) => day.title)).toEqual(['Upper A', 'Lower A', 'Upper B', 'Lower B']);
     expect(migrated.profile).toMatchObject({ balanceLevel: 'beginner', trainingTemplate: 'four-day-upper-lower' });
@@ -31,6 +31,8 @@ describe('app data migration', () => {
     expect(withoutWorkoutIds(migrated.sessions)).toEqual(withoutWorkoutIds(original.sessions));
     expect(migrated.sessions.every((session) => Boolean(session.workoutId))).toBe(true);
     expect(migrated.habits).toEqual(original.habits);
+    expect(migrated.trainingPlanner.dailyPlans).toHaveLength(7);
+    expect(migrated.trainingPlanner.weeklyTargets).toMatchObject({ upperSessions: 2, lowerSessions: 2, strengthSessions: 4 });
   });
 
   it('does not rename or rewrite historical workout records during migration', () => {
@@ -104,5 +106,23 @@ describe('app data migration', () => {
     const reloaded = migrateAppData(JSON.parse(JSON.stringify(saved)));
     expect(reloaded.measurements).toEqual(saved.measurements);
     expect(reloaded.bodyGoals.bodyFatPersonalTargetPercent).toBe(18);
+  });
+
+  it('persists explicit adaptive-planner selections and readiness through a JSON round trip', () => {
+    const saved = migrateAppData(createSeedData());
+    const plan = saved.trainingPlanner.dailyPlans[4];
+    saved.trainingPlanner.dailyPlans[4] = {
+      ...plan,
+      selectedSessionTemplateId: 'upper_a',
+      selectionSource: 'user_selected',
+      status: 'selected',
+      overrideWarningShown: true,
+      readinessResponse: { energy: 3, muscleSoreness: 2, jointDiscomfort: 'mild', availableMinutes: 50, preferredIntensity: 'light', recordedAt: '2026-08-21T08:00:00.000Z' },
+    };
+    const reloaded = migrateAppData(JSON.parse(JSON.stringify(saved)));
+    expect(reloaded.trainingPlanner.dailyPlans.find((item) => item.date === plan.date)).toMatchObject({
+      selectedSessionTemplateId: 'upper_a', selectionSource: 'user_selected', overrideWarningShown: true,
+      readinessResponse: { jointDiscomfort: 'mild', preferredIntensity: 'light' },
+    });
   });
 });
