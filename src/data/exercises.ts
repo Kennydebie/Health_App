@@ -80,7 +80,7 @@ export const exercises: Exercise[] = [
 export const exerciseMap = new Map(exercises.map((exercise) => [exercise.id, exercise]));
 
 export const defaultProgram: WorkoutDay[] = [
-  { id: 'monday', label: 'Mon', title: 'Upper A', duration: '50–65 min', isRestDay: false, exercises: [
+  { id: 'monday', label: 'Mon', title: 'Chest + Back + Arms', duration: '50–65 min', isRestDay: false, exercises: [
     { exerciseId: 'bench-press', sets: 3, repMin: 6, repMax: 10, restSeconds: 180, rir: '1–2' },
     { exerciseId: 'one-arm-row', sets: 3, repMin: 8, repMax: 12, restSeconds: 120, rir: '1–2' },
     { exerciseId: 'incline-db-press', sets: 3, repMin: 8, repMax: 12, restSeconds: 120, rir: '1–2' },
@@ -88,7 +88,7 @@ export const defaultProgram: WorkoutDay[] = [
     { exerciseId: 'db-curl', sets: 2, repMin: 10, repMax: 15, restSeconds: 75, rir: '1–2' },
     { exerciseId: 'triceps-extension', sets: 2, repMin: 10, repMax: 15, restSeconds: 75, rir: '1–2' },
   ] },
-  { id: 'tuesday', label: 'Tue', title: 'Lower A', duration: '50–65 min', isRestDay: false, exercises: [
+  { id: 'tuesday', label: 'Tue', title: 'Legs + Glutes', duration: '50–65 min', isRestDay: false, exercises: [
     { exerciseId: 'goblet-squat', sets: 3, repMin: 8, repMax: 12, restSeconds: 150, rir: '2' },
     { exerciseId: 'romanian-deadlift', sets: 3, repMin: 6, repMax: 10, restSeconds: 180, rir: '1–2' },
     { exerciseId: 'bulgarian-split-squat', sets: 3, repMin: 8, repMax: 12, restSeconds: 120, rir: '2' },
@@ -101,7 +101,7 @@ export const defaultProgram: WorkoutDay[] = [
     'Keep calories and protein on plan—recovery days still count.',
     'Aim for a consistent bedtime and at least 7 hours of sleep.',
   ], exercises: [] },
-  { id: 'thursday', label: 'Thu', title: 'Upper B', duration: '50–65 min', isRestDay: false, exercises: [
+  { id: 'thursday', label: 'Thu', title: 'Chest + Back + Shoulders', duration: '50–65 min', isRestDay: false, exercises: [
     { exerciseId: 'db-bench-press', sets: 3, repMin: 8, repMax: 12, restSeconds: 150, rir: '1–2' },
     { exerciseId: 'one-arm-row', sets: 3, repMin: 8, repMax: 12, restSeconds: 120, rir: '1–2' },
     { exerciseId: 'overhead-press', sets: 3, repMin: 6, repMax: 10, restSeconds: 150, rir: '1–2' },
@@ -116,7 +116,7 @@ export const defaultProgram: WorkoutDay[] = [
     'Hydrate, hit protein, and prepare tomorrow’s equipment.',
     'Prioritize sleep before the final lifting day of the week.',
   ], exercises: [] },
-  { id: 'saturday', label: 'Sat', title: 'Lower B', duration: '50–65 min', isRestDay: false, exercises: [
+  { id: 'saturday', label: 'Sat', title: 'Legs + Glutes', duration: '50–65 min', isRestDay: false, exercises: [
     { exerciseId: 'goblet-squat', sets: 3, repMin: 8, repMax: 12, restSeconds: 150, rir: '2' },
     { exerciseId: 'romanian-deadlift', sets: 3, repMin: 8, repMax: 12, restSeconds: 180, rir: '1–2' },
     { exerciseId: 'bulgarian-split-squat', sets: 3, repMin: 10, repMax: 15, restSeconds: 120, rir: '2' },

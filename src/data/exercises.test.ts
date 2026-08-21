@@ -7,6 +7,12 @@ describe('weekly training schedule', () => {
     expect(defaultProgram.filter((day) => !day.isRestDay)).toHaveLength(4);
     expect(defaultProgram.filter((day) => day.isRestDay)).toHaveLength(3);
     expect(defaultProgram.filter((day) => day.isRestDay).every((day) => day.exercises.length === 0)).toBe(true);
+    expect(defaultProgram.filter((day) => !day.isRestDay).map((day) => day.title)).toEqual([
+      'Chest + Back + Arms',
+      'Legs + Glutes',
+      'Chest + Back + Shoulders',
+      'Legs + Glutes',
+    ]);
   });
 
   it('provides a specific embeddable video for every editable exercise', () => {

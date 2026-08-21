@@ -8,13 +8,32 @@ import type { AppData, FoodLogEntry, HabitEntry, LoggedSet, MealType, UserProfil
 
 const STORAGE_KEY = 'cut-forward-data-v1';
 
+const readableScheduleTitles: Partial<Record<WorkoutDay['id'], string>> = {
+  monday: 'Chest + Back + Arms',
+  tuesday: 'Legs + Glutes',
+  thursday: 'Chest + Back + Shoulders',
+  saturday: 'Legs + Glutes',
+};
+
+const previousSessionTitles: Record<string, string> = {
+  'Upper A': 'Chest + Back + Arms',
+  'Lower A': 'Legs + Glutes',
+  'Lower + Shoulders': 'Legs + Glutes',
+  'Upper B': 'Chest + Back + Shoulders',
+  'Lower B': 'Legs + Glutes',
+};
+
 export function migrateAppData(saved: AppData): AppData {
-  if (saved.version >= 2 && saved.program.length === 7) return saved;
+  if (saved.version >= 3 && saved.program.length === 7) return saved;
+  const hasWeeklySchedule = saved.program.length === 7;
   return {
     ...saved,
-    version: 2,
-    profile: { ...saved.profile, trainingDays: ['Monday', 'Tuesday', 'Thursday', 'Saturday'] },
-    program: structuredClone(defaultProgram),
+    version: 3,
+    profile: hasWeeklySchedule ? saved.profile : { ...saved.profile, trainingDays: ['Monday', 'Tuesday', 'Thursday', 'Saturday'] },
+    program: hasWeeklySchedule
+      ? saved.program.map((day) => ({ ...day, title: readableScheduleTitles[day.id] ?? day.title }))
+      : structuredClone(defaultProgram),
+    sessions: saved.sessions.map((session) => ({ ...session, title: previousSessionTitles[session.title] ?? session.title })),
   };
 }
 
