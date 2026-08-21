@@ -5,28 +5,63 @@ import { foodMap } from '../data/foods';
 import { addMacros, entryMacros } from '../lib/nutrition';
 import { uid } from '../lib/id';
 import { buildProgramTemplate } from '../lib/workout';
-import type { AppData, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, ProgressionPlan, SquatProgressionLevel, TrainingTemplate, UserProfile, WeightEntry, WorkoutDay, WorkoutSession } from '../types/models';
+import type { AppData, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, ProgressionPlan, SquatProgressionLevel, TrainingTemplate, UserProfile, WeightEntry, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 const STORAGE_KEY = 'cut-forward-data-v1';
 
+const workoutIds = new Set<WorkoutId>(['upper_a', 'lower_a', 'upper_b', 'lower_b', 'full_body_a', 'full_body_b', 'full_body_c']);
+
+export function inferWorkoutId(
+  source: Pick<WorkoutDay, 'id' | 'title'> & { workoutId?: WorkoutId },
+  template: TrainingTemplate = 'four-day-upper-lower',
+): WorkoutId | undefined {
+  if (source.workoutId && workoutIds.has(source.workoutId)) return source.workoutId;
+  const title = source.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (title.includes('full body c')) return 'full_body_c';
+  if (title.includes('full body b')) return 'full_body_b';
+  if (title.includes('full body a')) return 'full_body_a';
+  if (/\bupper\s*b\b/.test(title)) return 'upper_b';
+  if (/\blower\s*b\b/.test(title)) return 'lower_b';
+  if (/\bupper\s*a\b/.test(title)) return 'upper_a';
+  if (/\blower\s*a\b/.test(title)) return 'lower_a';
+  if (template === 'four-day-upper-lower') {
+    const byDay: Partial<Record<WorkoutDay['id'], WorkoutId>> = { monday: 'upper_a', tuesday: 'lower_a', thursday: 'upper_b', saturday: 'lower_b' };
+    return byDay[source.id];
+  }
+  if (source.id === 'monday') return 'full_body_a';
+  if (source.id === 'thursday') return 'full_body_b';
+  if (template === 'three-day-full-body' && source.id === 'saturday') return 'full_body_c';
+  return undefined;
+}
+
 export function migrateAppData(saved: AppData): AppData {
   const legacy = saved as AppData & Partial<Pick<AppData, 'cardioLog' | 'weeklyCardioTarget' | 'squatProgression' | 'progressionPlans'>>;
-  if (saved.version >= 4 && saved.program.length === 7 && legacy.cardioLog && legacy.squatProgression && legacy.progressionPlans) return saved;
-  return {
+  const needsProgramUpgrade = saved.version < 4 || saved.program.length !== 7;
+  const base: AppData = {
     ...saved,
-    version: 4,
     profile: {
       ...saved.profile,
-      trainingDays: ['Monday', 'Tuesday', 'Thursday', 'Saturday'],
+      trainingDays: saved.profile.trainingDays ?? ['Monday', 'Tuesday', 'Thursday', 'Saturday'],
       balanceLevel: saved.profile.balanceLevel ?? 'beginner',
       trainingTemplate: saved.profile.trainingTemplate ?? 'four-day-upper-lower',
     },
-    program: structuredClone(defaultProgram),
+    program: needsProgramUpgrade ? structuredClone(defaultProgram) : saved.program,
     cardioLog: legacy.cardioLog ?? [],
     weeklyCardioTarget: legacy.weeklyCardioTarget ?? 105,
     squatProgression: legacy.squatProgression ?? { currentLevel: 'assisted-squat', stableSessions: 0, updatedAt: new Date().toISOString() },
     progressionPlans: legacy.progressionPlans ?? [],
   };
+  const template = base.profile.trainingTemplate;
+  const program = base.program.map((day) => day.isRestDay ? { ...day, workoutId: undefined } : { ...day, workoutId: inferWorkoutId(day, template) });
+  const programByDay = new Map(program.map((day) => [day.id, day]));
+  const sessions = base.sessions.map((session) => {
+    const legacySession = session as WorkoutSession & { workoutId?: WorkoutId };
+    const workoutId = legacySession.workoutId
+      ?? inferWorkoutId({ id: legacySession.dayId, title: legacySession.title }, template)
+      ?? programByDay.get(legacySession.dayId)?.workoutId;
+    return { ...session, workoutId: workoutId ?? `legacy_${legacySession.dayId}` };
+  });
+  return { ...base, version: 5, program, sessions };
 }
 
 function loadData(): AppData {
@@ -141,7 +176,8 @@ export function useAppData() {
       }));
       return [...warmups, ...working];
     });
-    const session: WorkoutSession = { id: uid('session'), date: new Date().toLocaleDateString('en-CA'), dayId: day.id, title: day.title, startedAt: new Date().toISOString(), durationSeconds: 0, sets };
+    if (!day.workoutId) return null;
+    const session: WorkoutSession = { id: uid('session'), date: new Date().toLocaleDateString('en-CA'), dayId: day.id, workoutId: day.workoutId, title: day.title, startedAt: new Date().toISOString(), durationSeconds: 0, sets };
     const plannedExercises = new Set(day.exercises.map((exercise) => exercise.exerciseId));
     update((current) => ({ ...current, sessions: [...current.sessions, session], progressionPlans: current.progressionPlans.filter((item) => !plannedExercises.has(item.exerciseId)) }));
     return session.id;

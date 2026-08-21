@@ -87,6 +87,7 @@ export interface Exercise {
 export type MovementPattern = 'Horizontal push' | 'Horizontal pull' | 'Vertical push' | 'Vertical pull substitute' | 'Squat' | 'Hip hinge' | 'Single-leg' | 'Knee-flexion hamstrings' | 'Calves' | 'Core' | 'Lateral shoulder';
 export type TrainingTemplate = 'two-day-full-body' | 'three-day-full-body' | 'four-day-upper-lower';
 export type SquatProgressionLevel = 'assisted-squat' | 'box-squat' | 'supported-goblet-squat' | 'goblet-squat' | 'supported-split-squat' | 'split-squat' | 'bulgarian-split-squat';
+export type WorkoutId = 'upper_a' | 'lower_a' | 'upper_b' | 'lower_b' | 'full_body_a' | 'full_body_b' | 'full_body_c' | `legacy_${string}`;
 
 export interface ExercisePrescription {
   sets: number;
@@ -105,6 +106,8 @@ export interface ProgramExercise extends ExercisePrescription {
 
 export interface WorkoutDay {
   id: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+  /** Stable identity for a lifting slot. It never changes when the visible title changes. */
+  workoutId?: WorkoutId;
   label: string;
   title: string;
   focus?: string;
@@ -131,6 +134,7 @@ export interface WorkoutSession {
   id: string;
   date: string;
   dayId: WorkoutDay['id'];
+  workoutId: WorkoutId;
   title: string;
   startedAt: string;
   completedAt?: string;

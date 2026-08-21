@@ -1,17 +1,27 @@
 import { exerciseMap } from '../data/exercises';
 import { shiftDate, toDateKey } from './date';
 import { workoutVolume } from './progress';
-import type { AppData, WeightEntry, WorkoutDay, WorkoutSession } from '../types/models';
+import type { AppData, WeightEntry, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
-const strengthDisplayNames: Partial<Record<WorkoutDay['id'], string>> = {
-  monday: 'Upper Body · Chest Focus',
-  tuesday: 'Lower Body · Squat & Control',
-  thursday: 'Upper Body · Shoulders & Back',
-  saturday: 'Lower Body · Hamstrings & Glutes',
+const workoutDisplayNames: Partial<Record<WorkoutId, string>> = {
+  upper_a: 'Upper Body · Chest & Back',
+  lower_a: 'Legs · Squat & Hamstrings',
+  upper_b: 'Upper Body · Shoulders & Back',
+  lower_b: 'Legs · Glutes & Hamstrings',
+  full_body_a: 'Full Body · Session A',
+  full_body_b: 'Full Body · Session B',
+  full_body_c: 'Full Body · Session C',
 };
 
-export function displayWorkoutTitle(day: Pick<WorkoutDay, 'id' | 'title'>): string {
-  return strengthDisplayNames[day.id] ?? day.title;
+const legacyDayDisplayNames: Partial<Record<WorkoutDay['id'], string>> = {
+  monday: 'Upper Body · Chest & Back',
+  tuesday: 'Legs · Squat & Hamstrings',
+  thursday: 'Upper Body · Shoulders & Back',
+  saturday: 'Legs · Glutes & Hamstrings',
+};
+
+export function displayWorkoutTitle(day: Pick<WorkoutDay, 'id' | 'title'> & { workoutId?: WorkoutId }): string {
+  return (day.workoutId ? workoutDisplayNames[day.workoutId] : undefined) ?? legacyDayDisplayNames[day.id] ?? day.title;
 }
 
 export function mondayOf(dateKey = toDateKey()): string {
@@ -23,6 +33,68 @@ export function mondayOf(dateKey = toDateKey()): string {
 export function datesInWeek(dateKey = toDateKey()): string[] {
   const start = mondayOf(dateKey);
   return Array.from({ length: 7 }, (_, index) => shiftDate(start, index));
+}
+
+export type PlanDayStatus = 'completed' | 'today' | 'upcoming' | 'skipped' | 'missed' | 'not-scheduled';
+
+export interface WeekPlanDay {
+  date: string;
+  day?: WorkoutDay;
+  status: PlanDayStatus;
+  completedSession?: WorkoutSession;
+  cardioMinutes: number;
+}
+
+export interface WeekSnapshot {
+  days: WeekPlanDay[];
+  completedStrength: number;
+  plannedStrength: number;
+  dueStrength: number;
+  cardioMinutes: number;
+  nutritionDays: number;
+  elapsedDays: number;
+}
+
+/** One source of truth for schedule cards, summaries, CTAs and progress metrics. */
+export function getWeekSnapshot(data: AppData, reference = toDateKey()): WeekSnapshot {
+  const dates = datesInWeek(reference);
+  const sessions = data.sessions.filter((session) => session.completedAt && dates.includes(session.date) && session.date <= reference);
+  const cardioByDate = new Map<string, number>();
+  for (const entry of data.cardioLog.filter((item) => dates.includes(item.date) && item.date <= reference)) {
+    cardioByDate.set(entry.date, (cardioByDate.get(entry.date) ?? 0) + entry.minutes);
+  }
+  const usedSessionIds = new Set<string>();
+  const days = dates.map((date, index): WeekPlanDay => {
+    const day = data.program[index];
+    if (!day) return { date, status: 'not-scheduled', cardioMinutes: cardioByDate.get(date) ?? 0 };
+    const cardioMinutes = cardioByDate.get(date) ?? 0;
+    let completedSession: WorkoutSession | undefined;
+    if (!day.isRestDay && day.workoutId) {
+      completedSession = sessions.find((session) => !usedSessionIds.has(session.id) && session.workoutId === day.workoutId);
+      if (completedSession) usedSessionIds.add(completedSession.id);
+    }
+    const completed = day.isRestDay ? cardioMinutes > 0 : Boolean(completedSession);
+    const status: PlanDayStatus = completed
+      ? 'completed'
+      : date === reference
+        ? 'today'
+        : date > reference
+          ? 'upcoming'
+          : day.isRestDay
+            ? 'skipped'
+            : 'missed';
+    return { date, day, status, completedSession, cardioMinutes };
+  });
+  const elapsedDates = dates.filter((date) => date <= reference);
+  return {
+    days,
+    completedStrength: days.filter((item) => !item.day?.isRestDay && item.status === 'completed').length,
+    dueStrength: days.filter((item) => !item.day?.isRestDay && item.date <= reference).length,
+    plannedStrength: data.program.filter((day) => !day.isRestDay).length,
+    cardioMinutes: [...cardioByDate.values()].reduce((sum, minutes) => sum + minutes, 0),
+    nutritionDays: new Set(data.foodLog.filter((entry) => elapsedDates.includes(entry.date)).map((entry) => entry.date)).size,
+    elapsedDays: elapsedDates.length,
+  };
 }
 
 export function activePlanWeek(weights: WeightEntry[], reference = toDateKey()): number {
@@ -45,21 +117,58 @@ export function trainingWeekStreak(sessions: WorkoutSession[], reference = toDat
 }
 
 export function weeklyConsistency(data: AppData, reference = toDateKey()) {
-  const dates = datesInWeek(reference);
-  const plannedStrength = data.program.filter((day) => !day.isRestDay).length;
-  const strength = new Set(data.sessions.filter((session) => session.completedAt && dates.includes(session.date)).map((session) => session.dayId)).size;
-  const nutrition = new Set(data.foodLog.filter((entry) => dates.includes(entry.date)).map((entry) => entry.date)).size;
-  const cardio = data.cardioLog.filter((entry) => dates.includes(entry.date)).reduce((sum, entry) => sum + entry.minutes, 0);
-  const strengthScore = plannedStrength ? Math.min(1, strength / plannedStrength) : 1;
-  const nutritionScore = nutrition / 7;
-  const cardioScore = Math.min(1, cardio / Math.max(1, data.weeklyCardioTarget));
+  const snapshot = getWeekSnapshot(data, reference);
+  const strengthScore = snapshot.dueStrength ? Math.min(1, snapshot.completedStrength / snapshot.dueStrength) : 1;
+  const nutritionScore = snapshot.elapsedDays ? snapshot.nutritionDays / snapshot.elapsedDays : 1;
+  const expectedCardio = data.weeklyCardioTarget * snapshot.elapsedDays / 7;
+  const cardioScore = expectedCardio ? Math.min(1, snapshot.cardioMinutes / expectedCardio) : 1;
   return {
     percent: Math.round((strengthScore * .6 + nutritionScore * .2 + cardioScore * .2) * 100),
-    strength,
-    plannedStrength,
-    nutritionDays: nutrition,
-    cardioMinutes: cardio,
+    strength: snapshot.completedStrength,
+    plannedStrength: snapshot.plannedStrength,
+    dueStrength: snapshot.dueStrength,
+    nutritionDays: snapshot.nutritionDays,
+    cardioMinutes: snapshot.cardioMinutes,
+    breakdown: {
+      strength: Math.round(strengthScore * 60),
+      nutrition: Math.round(nutritionScore * 20),
+      cardio: Math.round(cardioScore * 20),
+    },
   };
+}
+
+export interface DailyScoreBreakdown {
+  total: number;
+  items: Array<{ id: 'logging' | 'protein' | 'energy' | 'movement' | 'habits'; label: string; points: number; max: number }>;
+}
+
+export function dailyScore(data: AppData, date: string, totals: { calories: number; protein: number }): DailyScoreBreakdown {
+  const dayIndex = datesInWeek(date).indexOf(date);
+  const day = data.program[dayIndex];
+  const logged = data.foodLog.some((entry) => entry.date === date);
+  const logging = logged ? 20 : 0;
+  const protein = logged ? Math.round(Math.min(25, totals.protein / Math.max(1, data.profile.proteinTarget) * 25)) : 0;
+  const energy = logged && totals.calories >= data.profile.calorieTarget * .65 && totals.calories <= data.profile.calorieTarget * 1.05 ? 15 : 0;
+  const completedOnDate = data.sessions.some((session) => session.completedAt && session.date === date);
+  const activeForDay = data.sessions.some((session) => !session.completedAt && session.date === date && (!day?.workoutId || session.workoutId === day.workoutId));
+  const cardio = data.cardioLog.filter((entry) => entry.date === date).reduce((sum, entry) => sum + entry.minutes, 0);
+  const movement = day?.isRestDay
+    ? Math.round(Math.min(30, cardio / Math.max(1, day.cardioTargetMinutes ?? 30) * 30))
+    : completedOnDate
+      ? 30
+      : activeForDay
+        ? 10
+        : 0;
+  const habit = data.habits.find((entry) => entry.date === date);
+  const habits = habit ? Math.round(([habit.water, habit.walk, habit.sleep].filter(Boolean).length / 3) * 10) : 0;
+  const items: DailyScoreBreakdown['items'] = [
+    { id: 'logging', label: 'Food logged', points: logging, max: 20 },
+    { id: 'protein', label: 'Protein progress', points: protein, max: 25 },
+    { id: 'energy', label: 'Energy target range', points: energy, max: 15 },
+    { id: 'movement', label: day?.isRestDay ? 'Cardio / recovery' : 'Strength session', points: movement, max: 30 },
+    { id: 'habits', label: 'Support habits', points: habits, max: 10 },
+  ];
+  return { total: items.reduce((sum, item) => sum + item.points, 0), items };
 }
 
 export interface PersonalRecordEvent {
@@ -81,14 +190,7 @@ export function personalRecordEvents(sessions: WorkoutSession[]): PersonalRecord
       const previous = bestByExercise.get(set.exerciseId) ?? 0;
       if (estimate > previous + .01) {
         bestByExercise.set(set.exerciseId, estimate);
-        records.push({
-          date: session.date,
-          exerciseId: set.exerciseId,
-          exerciseName: exerciseMap.get(set.exerciseId)?.name ?? 'Saved exercise',
-          weightKg: set.weightKg,
-          reps: set.reps,
-          estimatedOneRepMax: estimate,
-        });
+        records.push({ date: session.date, exerciseId: set.exerciseId, exerciseName: exerciseMap.get(set.exerciseId)?.name ?? 'Saved exercise', weightKg: set.weightKg, reps: set.reps, estimatedOneRepMax: estimate });
       }
     }
   }
@@ -101,11 +203,6 @@ export function weeklyVolumeSeries(sessions: WorkoutSession[], reference = toDat
     const start = shiftDate(currentMonday, (index - weeks + 1) * 7);
     const end = shiftDate(start, 6);
     const relevant = sessions.filter((session) => session.completedAt && session.date >= start && session.date <= end);
-    return {
-      week: start.slice(5),
-      startDate: start,
-      volume: Math.round(relevant.reduce((sum, session) => sum + workoutVolume(session), 0)),
-      sessions: relevant.length,
-    };
+    return { week: start.slice(5), startDate: start, volume: Math.round(relevant.reduce((sum, session) => sum + workoutVolume(session), 0)), sessions: relevant.length };
   });
 }

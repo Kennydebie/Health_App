@@ -6,7 +6,7 @@ import { MacroMeter, ToneIcon, WeekStrip, type WeekStripItem } from '../componen
 import type { Page } from '../components/AppShell';
 import { exerciseMap } from '../data/exercises';
 import { prettyDate, toDateKey } from '../lib/date';
-import { activePlanWeek, datesInWeek, displayWorkoutTitle, weeklyConsistency } from '../lib/engagement';
+import { activePlanWeek, dailyScore, displayWorkoutTitle, getWeekSnapshot, weeklyConsistency } from '../lib/engagement';
 import { average, weightTrend } from '../lib/progress';
 import type { AppController } from '../state/useAppData';
 import type { WorkoutDay } from '../types/models';
@@ -32,35 +32,30 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
   const todayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date()).toLowerCase();
   const workoutDay = data.program.find((day) => day.id === todayName) ?? data.program[0];
   const activeSession = [...data.sessions].reverse().find((session) => !session.completedAt);
-  const completedToday = !workoutDay.isRestDay && data.sessions.some((session) => session.date === today && session.dayId === workoutDay.id && session.completedAt);
+  const weekSnapshot = getWeekSnapshot(data, today);
+  const todayPlan = weekSnapshot.days.find((item) => item.date === today);
+  const completedToday = !workoutDay.isRestDay && todayPlan?.status === 'completed';
   const cardioToday = data.cardioLog.filter((entry) => entry.date === today).reduce((sum, entry) => sum + entry.minutes, 0);
   const coach = coachMessage(totals.calories, totals.protein, profile.calorieTarget, profile.proteinTarget, trend.weeklyChange);
   const caloriesRemaining = profile.calorieTarget - totals.calories;
   const proteinRemaining = profile.proteinTarget - totals.protein;
   const consistency = weeklyConsistency(data, today);
   const week = activePlanWeek(data.weights, today);
-  const nutritionLogged = totals.calories > 0;
-  const sessionScore = workoutDay.isRestDay ? Math.min(30, cardioToday / Math.max(1, workoutDay.cardioTargetMinutes ?? 30) * 30) : completedToday ? 30 : activeSession ? 12 : 0;
-  const dailyScore = Math.round(Math.min(100,
-    (nutritionLogged ? 25 : 0) +
-    Math.min(25, totals.protein / Math.max(1, profile.proteinTarget) * 25) +
-    sessionScore +
-    (nutritionLogged && totals.calories <= profile.calorieTarget * 1.05 ? 20 : 0),
-  ));
+  const score = dailyScore(data, today, totals);
 
-  const weekItems: WeekStripItem[] = datesInWeek(today).map((date) => {
-    const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date(`${date}T12:00:00`)).toLowerCase();
-    const planned = data.program.find((item) => item.id === dayName);
-    const workout = data.sessions.some((session) => session.date === date && session.completedAt);
-    const nutrition = data.foodLog.some((entry) => entry.date === date);
-    const cardio = data.cardioLog.some((entry) => entry.date === date);
+  const weekItems: WeekStripItem[] = weekSnapshot.days.map((item) => {
+    const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date(`${item.date}T12:00:00`)).toLowerCase();
+    const workout = item.status === 'completed' && !item.day?.isRestDay;
+    const nutrition = data.foodLog.some((entry) => entry.date === item.date);
+    const cardio = item.cardioMinutes > 0;
     const signals = Number(workout) + Number(nutrition) + Number(cardio);
     return {
-      date,
+      date: item.date,
       day: dayName,
-      status: workout ? (signals > 1 ? 'mixed' : 'workout') : cardio ? (nutrition ? 'mixed' : 'cardio') : planned?.isRestDay ? 'recovery' : nutrition ? 'nutrition' : date > today ? 'upcoming' : 'workout',
-      complete: workout || cardio || (nutrition && Boolean(planned?.isRestDay)),
-      today: date === today,
+      status: workout ? (signals > 1 ? 'mixed' : 'workout') : cardio ? (nutrition ? 'mixed' : 'cardio') : item.status === 'upcoming' ? 'upcoming' : item.day?.isRestDay ? 'recovery' : nutrition ? 'nutrition' : 'workout',
+      complete: item.status === 'completed',
+      today: item.date === today,
+      stateLabel: ({ completed: 'Completed', today: 'Today', upcoming: 'Upcoming', skipped: 'Skipped', missed: 'Missed', 'not-scheduled': 'Not scheduled' } as const)[item.status],
     };
   });
 
@@ -89,8 +84,9 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
         <button className="primary-button command-action" type="button" onClick={action.run}><ActionIcon size={19} /> {action.label}<ArrowRight size={18} /></button>
       </div>
       <div className="daily-score">
-        <ProgressRing value={dailyScore} max={100} size={188} valueLabel={`${dailyScore}%`} label="today complete" tone="coral" />
-        <p><strong>{consistency.percent}% weekly consistency</strong><span>{consistency.strength} of {consistency.plannedStrength} strength sessions complete</span></p>
+        <ProgressRing value={score.total} max={100} size={188} valueLabel={`${score.total}%`} label="daily actions complete" tone="coral" />
+        <p><strong>{consistency.percent}% consistency to date</strong><span>{consistency.strength} of {consistency.plannedStrength} strength sessions complete</span></p>
+        <details className="score-explanation"><summary>How this score works</summary><div>{score.items.map((item) => <span key={item.id}><b>{item.label}</b><small>{item.points} / {item.max} pts</small></span>)}</div><p>Future sessions are never counted as missed.</p></details>
       </div>
     </section>
 

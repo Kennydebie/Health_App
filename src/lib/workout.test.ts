@@ -37,9 +37,17 @@ describe('workout programming logic', () => {
     expect(buildProgramTemplate('four-day-upper-lower', 'assisted-squat').filter((day) => !day.isRestDay)).toHaveLength(4);
   });
 
+  it('assigns a unique stable identity to every scheduled lifting slot', () => {
+    for (const template of ['two-day-full-body', 'three-day-full-body', 'four-day-upper-lower'] as const) {
+      const ids = buildProgramTemplate(template, 'assisted-squat').filter((day) => !day.isRestDay).map((day) => day.workoutId);
+      expect(ids.every(Boolean)).toBe(true);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
+
   it('recommends double progression without mutating workout history', () => {
     const prescription: ProgramExercise = { exerciseId: 'bench-press', sets: 3, repMin: 6, repMax: 10, restSeconds: 180, rir: '2' };
-    const session = (id: string, date: string): WorkoutSession => ({ id, date, dayId: 'monday', title: 'Upper A', startedAt: `${date}T10:00:00Z`, completedAt: `${date}T11:00:00Z`, durationSeconds: 3600, sets: [1, 2, 3].map((setNumber) => ({ id: `${id}_${setNumber}`, exerciseId: 'bench-press', setNumber, weightKg: 50, reps: 10, rir: 2, completed: true, isWarmup: false })) });
+    const session = (id: string, date: string): WorkoutSession => ({ id, date, dayId: 'monday', workoutId: 'upper_a', title: 'Upper A', startedAt: `${date}T10:00:00Z`, completedAt: `${date}T11:00:00Z`, durationSeconds: 3600, sets: [1, 2, 3].map((setNumber) => ({ id: `${id}_${setNumber}`, exerciseId: 'bench-press', setNumber, weightKg: 50, reps: 10, rir: 2, completed: true, isWarmup: false })) });
     const sessions = [session('one', '2026-08-10'), session('two', '2026-08-17')];
     const before = structuredClone(sessions);
     const recommendation = progressionRecommendation(sessions, 'bench-press', prescription);

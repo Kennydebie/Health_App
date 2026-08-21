@@ -23,6 +23,7 @@ export interface WeekStripItem {
   status: 'workout' | 'nutrition' | 'cardio' | 'recovery' | 'upcoming' | 'mixed';
   complete?: boolean;
   today?: boolean;
+  stateLabel?: 'Completed' | 'Today' | 'Upcoming' | 'Skipped' | 'Missed' | 'Not scheduled';
 }
 
 const weekIcons = { workout: Dumbbell, nutrition: Utensils, cardio: HeartPulse, recovery: MoonStar, upcoming: MoonStar, mixed: Check };
@@ -31,8 +32,8 @@ export function WeekStrip({ items }: { items: WeekStripItem[] }) {
   return <div className="week-strip" aria-label="Weekly consistency">
     {items.map((item) => {
       const Icon = weekIcons[item.status];
-      return <div className={`week-strip__day ${item.status} ${item.complete ? 'complete' : ''} ${item.today ? 'today' : ''}`} key={item.date} title={`${item.day}: ${item.status}`}>
-        <span>{item.day.slice(0, 1)}</span><i><Icon size={14} /></i><small>{item.today ? 'Today' : item.complete ? 'Done' : item.status === 'upcoming' ? 'Next' : item.status}</small>
+      return <div className={`week-strip__day ${item.status} ${item.complete ? 'complete' : ''} ${item.today ? 'today' : ''}`} key={item.date} title={`${item.day}: ${item.stateLabel ?? item.status}`}>
+        <span>{item.day.slice(0, 1)}</span><i><Icon size={14} /></i><small>{item.stateLabel ?? (item.today ? 'Today' : item.complete ? 'Done' : item.status === 'upcoming' ? 'Next' : item.status)}</small>
       </div>;
     })}
   </div>;

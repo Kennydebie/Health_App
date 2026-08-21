@@ -1,6 +1,6 @@
 import { defaultProgram, exerciseMap } from '../data/exercises';
 import { shiftDate, toDateKey } from './date';
-import type { CardioEntry, MovementPattern, ProgramExercise, SquatProgressionLevel, TrainingTemplate, UserProfile, WorkoutDay, WorkoutSession } from '../types/models';
+import type { CardioEntry, MovementPattern, ProgramExercise, SquatProgressionLevel, TrainingTemplate, UserProfile, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 export const squatProgressionLevels: Array<{ id: SquatProgressionLevel; label: string; requirement: 'supported' | 'basic' | 'advanced' }> = [
   { id: 'assisted-squat', label: 'Assisted squat', requirement: 'supported' },
@@ -88,6 +88,7 @@ function cloneRecoveryDays(): WorkoutDay[] {
     duration: day.isRestDay ? day.duration : '20–35 min',
     exercises: [],
     isRestDay: true,
+    workoutId: undefined,
     cardioTargetMinutes: day.cardioTargetMinutes ?? 25,
     cardioSuggestion: day.cardioSuggestion ?? 'Easy walk, bike or other low-impact cardio at a conversational pace.',
     recovery: day.recovery ?? [
@@ -122,12 +123,12 @@ export function buildProgramTemplate(template: TrainingTemplate, squatLevel: Squ
     return structuredClone(defaultProgram).map((day) => ({ ...day, exercises: day.exercises.map((item) => item.variationGroup === 'squat-progression' ? { ...item, exerciseId: squatLevel } : item) }));
   }
   const program = cloneRecoveryDays();
-  const makeTrainingDay = (index: number, title: string, focus: string, exercises: ProgramExercise[]) => {
-    program[index] = { ...program[index], title, focus, duration: '60–75 min', isRestDay: false, cardioTargetMinutes: undefined, cardioSuggestion: undefined, recovery: undefined, exercises: structuredClone(exercises).map((item) => item.variationGroup === 'squat-progression' ? { ...item, exerciseId: squatLevel } : item) };
+  const makeTrainingDay = (index: number, workoutId: WorkoutId, title: string, focus: string, exercises: ProgramExercise[]) => {
+    program[index] = { ...program[index], workoutId, title, focus, duration: '60–75 min', isRestDay: false, cardioTargetMinutes: undefined, cardioSuggestion: undefined, recovery: undefined, exercises: structuredClone(exercises).map((item) => item.variationGroup === 'squat-progression' ? { ...item, exerciseId: squatLevel } : item) };
   };
-  makeTrainingDay(0, 'Full body A', 'Push + pull + squat', fullBodyA);
-  makeTrainingDay(3, 'Full body B', 'Shoulders + hinge + single-leg', fullBodyB);
-  if (template === 'three-day-full-body') makeTrainingDay(5, 'Full body A', 'Alternating full-body session', fullBodyA);
+  makeTrainingDay(0, 'full_body_a', 'Full body A', 'Push + pull + squat', fullBodyA);
+  makeTrainingDay(3, 'full_body_b', 'Full body B', 'Shoulders + hinge + single-leg', fullBodyB);
+  if (template === 'three-day-full-body') makeTrainingDay(5, 'full_body_c', 'Full body C', 'Alternating full-body session', fullBodyA);
   return program;
 }
 

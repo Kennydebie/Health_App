@@ -588,6 +588,43 @@ input:focus, select:focus { border-color: rgba(240,138,120,.7); box-shadow: 0 0 
 .recent-foods { scrollbar-width: none; }
 .recent-foods::-webkit-scrollbar { display: none; }
 
+/* Focused usability and data-consistency polish */
+[hidden] { display: none !important; }
+.score-explanation { width: min(310px,100%); margin-top: 10px; color: var(--muted); font-size: 11px; }
+.score-explanation summary { width: fit-content; margin-inline: auto; color: var(--text); cursor: pointer; }
+.score-explanation > div { display: grid; gap: 5px; margin-top: 10px; padding: 10px; border: 1px solid var(--line-soft); border-radius: 12px; background: rgba(7,12,15,.45); }
+.score-explanation span { display: flex; justify-content: space-between; gap: 14px; }.score-explanation b { color: var(--text); font-weight: 600; }.score-explanation small { color: var(--muted); font-size: 10px; }.score-explanation p { margin: 7px 0 0; text-align: center; font-size: 10px; }
+
+.premium-day-tabs button { min-height: 116px; gap: 7px; padding: 11px; }
+.premium-day-tabs strong { min-height: 0; font-size: 11px; }
+.premium-day-tabs small { display: flex; align-items: center; gap: 5px; min-height: 18px; font-size: 9px; }
+.day-tab-top > span, .day-tab-top > i { width: 30px !important; height: 30px !important; }
+.program-balance { margin-top: 20px; border-top: 1px solid var(--line-soft); }
+.program-balance > summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 2px 2px; cursor: pointer; list-style: none; }
+.program-balance > summary::-webkit-details-marker { display: none; }.program-balance > summary span { display: grid; gap: 3px; }.program-balance > summary strong { color: var(--text); font-size: 15px; }.program-balance > summary small { color: var(--muted); font-size: 11px; }.program-balance > summary svg { transition: transform .2s ease; }.program-balance[open] > summary svg { transform: rotate(90deg); }
+.program-balance__body { padding-top: 15px; }.balance-note { max-width: 760px; margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.plan-settings { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }.plan-settings > summary { width: fit-content; color: var(--blue); font-size: 12px; font-weight: 700; cursor: pointer; }.plan-settings .template-picker { margin-top: 13px; }
+
+.progress-tabs { position: sticky; z-index: 4; top: 10px; display: flex; width: fit-content; gap: 4px; margin: 0 0 18px; padding: 4px; border: 1px solid var(--line); border-radius: 14px; background: rgba(14,22,26,.9); box-shadow: var(--shadow); backdrop-filter: blur(14px); }
+.progress-tabs button { padding: 9px 16px; color: var(--muted); border: 0; border-radius: 10px; background: transparent; font-size: 12px; font-weight: 700; }.progress-tabs button:hover { color: var(--text); }.progress-tabs button.active { color: #081011; background: var(--blue); }
+.chart-area, .small-chart { min-width: 0; overflow: hidden; }.recharts-responsive-container { min-width: 0; }
+
+.food-row { grid-template-columns: 64px minmax(0,1fr) auto 17px; min-height: 86px; }.food-row .food-image { width: 64px; height: 64px; }.food-row > div strong { font-size: 14px; line-height: 1.3; }.food-row > div span { font-size: 11px; line-height: 1.4; }.food-row > p span { font-size: 10px; }
+.food-result__main { grid-template-columns: 68px minmax(0,1fr) auto 17px; min-height: 82px; }.food-result .food-image { width: 68px; height: 68px; }.food-result__main div strong { font-size: 14px; line-height: 1.3; }.food-result__main div span { font-size: 11px; line-height: 1.4; }
+.recent-foods button { min-height: 48px; font-size: 12px; }.recent-foods .food-image { width: 38px; height: 38px; }
+.frequent-foods > div:last-child { grid-template-columns: repeat(auto-fit,minmax(135px,1fr)); overflow-x: visible; }.frequent-foods button { grid-template-columns: 58px minmax(0,1fr) 16px; min-height: 74px; }.frequent-foods .food-image { width: 58px; height: 58px; }.frequent-foods button strong, .frequent-foods button small { overflow: visible; white-space: normal; }.frequent-foods button strong { font-size: 12px; line-height: 1.25; }.frequent-foods button small { font-size: 10px; line-height: 1.3; }
+
+.unsaved-label { display: inline-flex; margin-left: 8px; padding: 3px 7px; color: var(--amber); border: 1px solid rgba(239,180,76,.25); border-radius: 99px; background: var(--amber-soft); font-size: 10px; }
+.advanced-tools { padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,.015); }.advanced-tools summary { color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; }.advanced-tools p { color: var(--muted); font-size: 11px; line-height: 1.5; }.advanced-tools .reset-button { width: 100%; margin-top: 4px; }
+
+@media (max-width: 760px) {
+  .premium-day-tabs { display: flex; grid-template-columns: none; gap: 8px; margin-inline: -14px; padding: 2px 14px 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+  .premium-day-tabs::-webkit-scrollbar { display: none; }.premium-day-tabs button, .premium-day-tabs button:last-child { flex: 0 0 142px; min-height: 112px; grid-column: auto; scroll-snap-align: start; }
+  .progress-tabs { top: 6px; width: 100%; overflow-x: auto; }.progress-tabs button { flex: 1 0 auto; padding-inline: 13px; }
+  .food-row { grid-template-columns: 56px minmax(0,1fr) auto; }.food-row .food-image { width: 56px; height: 56px; }.food-result__main { grid-template-columns: 58px minmax(0,1fr) 17px; }.food-result .food-image { width: 58px; height: 58px; }
+  .frequent-foods > div:last-child { display: flex; overflow-x: auto; scrollbar-width: none; }.frequent-foods button { flex: 0 0 215px; grid-template-columns: 58px minmax(0,1fr) 16px; }
+}
+
 .exercise-visual-button { width: 100%; aspect-ratio: 16 / 9; }
 .inline-video-player { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid rgba(240,138,120,.2); border-radius: 16px; background: #050708; box-shadow: 0 14px 34px rgba(0,0,0,.24); }
 .active-exercise-hero.video-playing { grid-template-columns: minmax(500px, 580px) minmax(280px, 1fr); align-items: start; }
