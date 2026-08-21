@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, CirclePlus, Coffee, Cookie, Copy, Flame, Heart, MoonStar, Pencil, Plus, RotateCcw, Search, Star, Sun, Trash2, UtensilsCrossed, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, CirclePlus, Coffee, Cookie, Copy, Heart, MoonStar, Pencil, Plus, RotateCcw, Search, Settings2, Star, Sun, Trash2, UtensilsCrossed, X } from 'lucide-react';
 import { FoodImage } from '../components/FoodImage';
 import { Modal } from '../components/Modal';
 import { ToneIcon, type VisualTone } from '../components/Visuals';
 import { foodMap, foods } from '../data/foods';
 import { prettyDate, relativeDay, shiftDate, toDateKey } from '../lib/date';
 import { entryMacros, roundMacro, servingAmount } from '../lib/nutrition';
+import { evaluateNutritionDay, targetSnapshotForDate } from '../lib/nutritionEvaluation';
 import type { AppController } from '../state/useAppData';
 import type { FoodItem, FoodLogEntry, MealType } from '../types/models';
+import { NutritionCalendar, NutritionGoalBars, NutritionSettingsModal, NutritionTrends } from './NutritionOverview';
 
 const meals: Array<{ id: MealType; label: string }> = [
   { id: 'breakfast', label: 'Breakfast' },
@@ -93,8 +95,10 @@ export function FoodPage({ controller }: FoodPageProps) {
   const [defaultMeal, setDefaultMeal] = useState<MealType>('breakfast');
   const [query, setQuery] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
+  const [view, setView] = useState<'diary' | 'calendar' | 'trends'>(() => (localStorage.getItem('project75-nutrition-view') as 'diary' | 'calendar' | 'trends' | null) ?? 'diary');
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const totals = totalsForDate(date);
-  const remaining = data.profile.calorieTarget - totals.calories;
+  const selectedEvaluation = evaluateNutritionDay({ date, today: toDateKey(), totals, target: targetSnapshotForDate(data.nutritionTargetHistory, data.profile, date), settings: data.nutritionSettings, record: data.nutritionDayRecords.find((item) => item.date === date) });
   const filteredFoods = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const result = normalized ? foods.filter((food) => `${food.name} ${food.category}`.toLowerCase().includes(normalized)) : foods;
@@ -103,14 +107,18 @@ export function FoodPage({ controller }: FoodPageProps) {
 
   const openAdd = (meal: MealType) => { setDefaultMeal(meal); setSelectedFood(null); setQuery(''); setAddOpen(true); };
   const closeAdd = () => { setAddOpen(false); setSelectedFood(null); };
+  const selectView = (next: 'diary' | 'calendar' | 'trends') => { setView(next); localStorage.setItem('project75-nutrition-view', next); };
 
   return (
     <div className="page food-page">
       <header className="page-header food-header">
-        <div><h1>Food</h1><p>Track meals, calories and macros.</p></div>
-        <button className="primary-button" type="button" onClick={() => openAdd('breakfast')}><Plus size={19} /> Add food</button>
+        <div><h1>Nutrition</h1><p>Log meals and review daily, weekly and monthly goal adherence.</p></div>
+        <div className="nutrition-header-actions"><button className="secondary-button" type="button" onClick={() => setSettingsOpen(true)}><Settings2 size={17}/> Settings</button><button className="primary-button" type="button" onClick={() => { selectView('diary'); openAdd('breakfast'); }}><Plus size={19} /> Add food</button></div>
       </header>
 
+      <nav className="nutrition-tabs" aria-label="Nutrition sections" role="tablist">{(['diary', 'calendar', 'trends'] as const).map((tab) => <button type="button" role="tab" key={tab} aria-selected={view === tab} className={view === tab ? 'active' : ''} onClick={() => selectView(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
+
+      {view === 'diary' ? <>
       <section className="date-strip">
         <button type="button" className="icon-button" onClick={() => setDate((current) => shiftDate(current, -1))} aria-label="Previous day"><ChevronLeft size={20} /></button>
         <button type="button" className="date-chip secondary" onClick={() => setDate(shiftDate(date, -1))}><span>{relativeDay(shiftDate(date, -1))}</span><small>{prettyDate(shiftDate(date, -1))}</small></button>
@@ -119,16 +127,7 @@ export function FoodPage({ controller }: FoodPageProps) {
         <button type="button" className="icon-button" onClick={() => setDate((current) => shiftDate(current, 1))} aria-label="Next day"><ChevronRight size={20} /></button>
       </section>
 
-      <section className="nutrition-summary premium-nutrition-summary">
-        <div className="calorie-summary">
-          <span className="metric-icon lime"><Flame size={20} /></span>
-          <div><p>{remaining >= 0 ? 'Calories remaining' : 'Calories over target'}</p><strong className={remaining < 0 ? 'text-warning' : ''}>{Math.abs(Math.round(remaining))}</strong></div>
-          <span>{Math.round(totals.calories).toLocaleString()} / {data.profile.calorieTarget.toLocaleString()} kcal</span>
-        </div>
-        <div className="nutrition-summary__macro protein"><p>Protein <span>{Math.round(totals.protein)} / {data.profile.proteinTarget} g</span></p><div><span className="blue" style={{ width: `${Math.min(100, totals.protein / data.profile.proteinTarget * 100)}%` }} /></div><small>{Math.max(0, Math.round(data.profile.proteinTarget - totals.protein))} g remaining</small></div>
-        <div className="nutrition-summary__macro carbs"><p>Carbohydrates <span>{Math.round(totals.carbs)} / {data.profile.carbTarget} g</span></p><div><span className="amber" style={{ width: `${Math.min(100, totals.carbs / data.profile.carbTarget * 100)}%` }} /></div><small>{Math.max(0, Math.round(data.profile.carbTarget - totals.carbs))} g remaining</small></div>
-        <div className="nutrition-summary__macro fat"><p>Fat <span>{Math.round(totals.fat)} / {data.profile.fatTarget} g</span></p><div><span className="violet" style={{ width: `${Math.min(100, totals.fat / data.profile.fatTarget * 100)}%` }} /></div><small>{Math.max(0, Math.round(data.profile.fatTarget - totals.fat))} g remaining</small></div>
-      </section>
+      <NutritionGoalBars evaluation={selectedEvaluation}/>
 
       <section className="food-quickbar">
         <div><button type="button" onClick={() => setQuickOpen((open) => !open)}><RotateCcw size={17} /> Quick add <ChevronRight size={16} /></button>{quickOpen ? <div className="quick-menu">
@@ -163,6 +162,10 @@ export function FoodPage({ controller }: FoodPageProps) {
           </article>;
         })}
       </section>
+      </> : null}
+
+      {view === 'calendar' ? <NutritionCalendar controller={controller} selectedDate={date} onSelectDate={setDate} onOpenDiary={(selected) => { setDate(selected); selectView('diary'); }} onAddFood={(selected) => { setDate(selected); selectView('diary'); openAdd('breakfast'); }} onEditEntry={(entry) => { setDate(entry.date); selectView('diary'); setEditEntry(entry); }}/> : null}
+      {view === 'trends' ? <NutritionTrends controller={controller}/> : null}
 
       <Modal open={addOpen} onClose={closeAdd} title={selectedFood ? 'Choose quantity' : 'Add food'} subtitle={selectedFood ? `Log ${selectedFood.name} to ${relativeDay(date).toLowerCase()}.` : 'Search real foods or choose a recent favorite.'} size={selectedFood ? 'medium' : 'large'}>
         {selectedFood ? <FoodForm food={selectedFood} defaultMeal={defaultMeal} submitLabel="Add to diary" onSave={(form) => { addFood({ ...form, foodId: selectedFood.id, date }); closeAdd(); }} /> : <div className="food-search">
@@ -181,6 +184,7 @@ export function FoodPage({ controller }: FoodPageProps) {
           <div className="destructive-actions"><button type="button" onClick={() => { duplicateFood(editEntry.id); setEditEntry(null); }}><Copy size={17} /> Duplicate</button><button type="button" className="danger" onClick={() => { deleteFood(editEntry.id); setEditEntry(null); }}><Trash2 size={17} /> Delete</button></div>
         </> : null}
       </Modal>
+      {settingsOpen ? <NutritionSettingsModal settings={data.nutritionSettings} onSave={controller.updateNutritionSettings} onClose={() => setSettingsOpen(false)}/> : null}
     </div>
   );
 }

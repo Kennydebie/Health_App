@@ -14,7 +14,7 @@ interface AppShellProps {
 
 const navItems = [
   { id: 'home' as const, label: 'Home', Icon: House },
-  { id: 'food' as const, label: 'Food', Icon: Apple },
+  { id: 'food' as const, label: 'Nutrition', Icon: Apple },
   { id: 'workout' as const, label: 'Workout', Icon: Dumbbell },
   { id: 'progress' as const, label: 'Progress', Icon: ChartNoAxesCombined },
   { id: 'profile' as const, label: 'Profile', Icon: Settings2 },

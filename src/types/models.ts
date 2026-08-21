@@ -39,6 +39,29 @@ export interface SavedMeal {
   items: Array<Pick<FoodLogEntry, 'foodId' | 'servingId' | 'quantity'>>;
 }
 
+export interface DailyNutritionTargetSnapshot {
+  date: string;
+  caloriesKcal: number;
+  proteinGrams: number;
+  carbohydrateGrams: number;
+  fatGrams: number;
+  timezone: string;
+}
+
+export interface NutritionEvaluationSettings {
+  version: 1;
+  calories: { onTargetMin: number; onTargetMax: number; closeMin: number; closeMax: number };
+  protein: { onTargetMin: number; closeMin: number };
+  macros: { onTargetMin: number; onTargetMax: number; closeMin: number; closeMax: number };
+  untrackedDayDefault: 'excluded' | 'no_data';
+}
+
+export interface NutritionDayRecord {
+  date: string;
+  finishedAt?: string;
+  untrackedTreatment?: 'excluded' | 'no_data';
+}
+
 export interface UserProfile {
   name: string;
   age: number;
@@ -341,6 +364,9 @@ export interface AppData {
   version: number;
   profile: UserProfile;
   foodLog: FoodLogEntry[];
+  nutritionTargetHistory: DailyNutritionTargetSnapshot[];
+  nutritionSettings: NutritionEvaluationSettings;
+  nutritionDayRecords: NutritionDayRecord[];
   favorites: string[];
   recentFoodIds: string[];
   savedMeals: SavedMeal[];

@@ -9,7 +9,8 @@ import { DEFAULT_BODY_GOALS, withDetectedOutliers } from '../lib/bodyMeasurement
 import { DEFAULT_TRAINING_PLANNER, dayIdForDate, moveTrainingSession as movePlannerSession, recalculateTrainingWeek, restoreRecommendedWeek as restorePlannerWeek, selectTrainingSession as selectPlannerSession, workoutTemplate } from '../lib/adaptivePlanner';
 import { toDateKey } from '../lib/date';
 import { createWeightLossPlan } from '../lib/weightLossPlan';
-import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementConfidence, BodyMeasurementDraft, BodyMetricKey, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, ProgressionPlan, ReadinessResponse, SessionTemplateId, SquatProgressionLevel, TrainingDayPlan, TrainingPlannerState, TrainingSelectionSource, TrainingTemplate, UserProfile, WeightLossPlan, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
+import { DEFAULT_NUTRITION_SETTINGS, detectedTimezone, nutritionTargetFromProfile, upsertTargetSnapshot } from '../lib/nutritionEvaluation';
+import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementConfidence, BodyMeasurementDraft, BodyMetricKey, CardioEntry, DailyNutritionTargetSnapshot, FoodLogEntry, HabitEntry, LoggedSet, MealType, NutritionDayRecord, NutritionEvaluationSettings, ProgressionPlan, ReadinessResponse, SessionTemplateId, SquatProgressionLevel, TrainingDayPlan, TrainingPlannerState, TrainingSelectionSource, TrainingTemplate, UserProfile, WeightLossPlan, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 const STORAGE_KEY = 'cut-forward-data-v1';
 
@@ -53,13 +54,16 @@ type LegacyMeasurement = Partial<BodyMeasurement> & {
   confidence?: BodyMeasurementConfidence & { timestamp?: number | null };
 };
 
-type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals' | 'weightLossPlans' | 'trainingPlanner'> & {
+type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals' | 'weightLossPlans' | 'trainingPlanner' | 'nutritionTargetHistory' | 'nutritionSettings' | 'nutritionDayRecords'> & {
   profile: UserProfile & { startWeightKg?: number; currentWeightKg?: number };
   measurements?: LegacyMeasurement[];
   bodyMeasurements?: LegacyMeasurement[];
   weights?: LegacyWeightEntry[];
   bodyGoals?: Partial<BodyGoalSettings>;
   weightLossPlans?: WeightLossPlan[];
+  nutritionTargetHistory?: DailyNutritionTargetSnapshot[];
+  nutritionSettings?: Partial<NutritionEvaluationSettings>;
+  nutritionDayRecords?: NutritionDayRecord[];
   trainingPlanner?: Partial<TrainingPlannerState>;
 };
 
@@ -112,6 +116,10 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
   const measurements = withDetectedOutliers(combinedMeasurements.some((measurement) => !measurement.isDemo)
     ? combinedMeasurements.filter((measurement) => !measurement.isDemo)
     : combinedMeasurements);
+  const firstNutritionDate = legacy.foodLog.map((entry) => entry.date).sort()[0] ?? toDateKey();
+  const nutritionTargetHistory = legacy.nutritionTargetHistory?.length
+    ? legacy.nutritionTargetHistory
+    : [nutritionTargetFromProfile(profile as UserProfile, firstNutritionDate, detectedTimezone())];
   const withoutLegacyCollections = { ...legacy };
   delete withoutLegacyCollections.weights;
   delete withoutLegacyCollections.bodyMeasurements;
@@ -127,6 +135,16 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
     measurements,
     bodyGoals: { ...DEFAULT_BODY_GOALS, ...legacy.bodyGoals, version: 1 },
     weightLossPlans: legacy.weightLossPlans ?? [],
+    nutritionTargetHistory,
+    nutritionSettings: {
+      ...DEFAULT_NUTRITION_SETTINGS,
+      ...legacy.nutritionSettings,
+      version: 1,
+      calories: { ...DEFAULT_NUTRITION_SETTINGS.calories, ...legacy.nutritionSettings?.calories },
+      protein: { ...DEFAULT_NUTRITION_SETTINGS.protein, ...legacy.nutritionSettings?.protein },
+      macros: { ...DEFAULT_NUTRITION_SETTINGS.macros, ...legacy.nutritionSettings?.macros },
+    },
+    nutritionDayRecords: legacy.nutritionDayRecords ?? [],
     trainingPlanner: {
       ...DEFAULT_TRAINING_PLANNER,
       ...legacy.trainingPlanner,
@@ -150,7 +168,7 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
       ?? programByDay.get(legacySession.dayId)?.workoutId;
     return { ...session, workoutId: workoutId ?? `legacy_${legacySession.dayId}` };
   });
-  const migrated = { ...base, version: 8, program, sessions };
+  const migrated = { ...base, version: 9, program, sessions };
   return { ...migrated, trainingPlanner: recalculateTrainingWeek(migrated) };
 }
 
@@ -185,11 +203,16 @@ export function useAppData() {
   }, [update]);
 
   const addFood = useCallback((entry: Omit<FoodLogEntry, 'id' | 'createdAt'>) => {
-    update((current) => ({
-      ...current,
-      foodLog: [...current.foodLog, { ...entry, id: uid('food'), createdAt: new Date().toISOString() }],
-      recentFoodIds: [entry.foodId, ...current.recentFoodIds.filter((id) => id !== entry.foodId)].slice(0, 8),
-    }));
+    update((current) => {
+      const target = nutritionTargetFromProfile(current.profile, entry.date, detectedTimezone());
+      const hasApplicableTarget = current.nutritionTargetHistory.some((item) => item.date <= entry.date);
+      return {
+        ...current,
+        foodLog: [...current.foodLog, { ...entry, id: uid('food'), createdAt: new Date().toISOString() }],
+        recentFoodIds: [entry.foodId, ...current.recentFoodIds.filter((id) => id !== entry.foodId)].slice(0, 8),
+        nutritionTargetHistory: hasApplicableTarget ? current.nutritionTargetHistory : upsertTargetSnapshot(current.nutritionTargetHistory, target),
+      };
+    });
   }, [update]);
 
   const updateFood = useCallback((id: string, changes: Partial<Pick<FoodLogEntry, 'meal' | 'servingId' | 'quantity'>>) => {
@@ -211,15 +234,38 @@ export function useAppData() {
 
   const repeatMeal = useCallback((sourceDate: string, targetDate: string, meal: MealType) => update((current) => {
     const copies = current.foodLog.filter((entry) => entry.date === sourceDate && entry.meal === meal).map((entry) => ({ ...entry, id: uid('food'), date: targetDate, createdAt: new Date().toISOString() }));
-    return { ...current, foodLog: [...current.foodLog, ...copies] };
+    const history = current.nutritionTargetHistory.some((item) => item.date <= targetDate) ? current.nutritionTargetHistory : upsertTargetSnapshot(current.nutritionTargetHistory, nutritionTargetFromProfile(current.profile, targetDate));
+    return { ...current, foodLog: [...current.foodLog, ...copies], nutritionTargetHistory: history };
   }), [update]);
 
   const addSavedMeal = useCallback((savedMealId: string, date: string, meal: MealType) => update((current) => {
     const saved = current.savedMeals.find((item) => item.id === savedMealId);
     if (!saved) return current;
     const entries = saved.items.map((item) => ({ ...item, id: uid('food'), date, meal, createdAt: new Date().toISOString() }));
-    return { ...current, foodLog: [...current.foodLog, ...entries] };
+    const history = current.nutritionTargetHistory.some((item) => item.date <= date) ? current.nutritionTargetHistory : upsertTargetSnapshot(current.nutritionTargetHistory, nutritionTargetFromProfile(current.profile, date));
+    return { ...current, foodLog: [...current.foodLog, ...entries], nutritionTargetHistory: history };
   }), [update]);
+
+  const copyNutritionDay = useCallback((sourceDate: string, targetDate: string) => update((current) => {
+    const copies = current.foodLog.filter((entry) => entry.date === sourceDate).map((entry) => ({ ...entry, id: uid('food'), date: targetDate, createdAt: new Date().toISOString() }));
+    if (!copies.length) return current;
+    const history = current.nutritionTargetHistory.some((item) => item.date <= targetDate) ? current.nutritionTargetHistory : upsertTargetSnapshot(current.nutritionTargetHistory, nutritionTargetFromProfile(current.profile, targetDate));
+    return { ...current, foodLog: [...current.foodLog, ...copies], nutritionTargetHistory: history };
+  }), [update]);
+
+  const finishNutritionDay = useCallback((date: string) => update((current) => ({
+    ...current,
+    nutritionDayRecords: [...current.nutritionDayRecords.filter((item) => item.date !== date), { ...current.nutritionDayRecords.find((item) => item.date === date), date, finishedAt: new Date().toISOString(), untrackedTreatment: undefined }],
+  })), [update]);
+
+  const setNutritionDayTreatment = useCallback((date: string, treatment?: NutritionDayRecord['untrackedTreatment']) => update((current) => ({
+    ...current,
+    nutritionDayRecords: treatment
+      ? [...current.nutritionDayRecords.filter((item) => item.date !== date), { date, untrackedTreatment: treatment }]
+      : current.nutritionDayRecords.filter((item) => item.date !== date),
+  })), [update]);
+
+  const updateNutritionSettings = useCallback((settings: NutritionEvaluationSettings) => update((current) => ({ ...current, nutritionSettings: settings })), [update]);
 
   const saveWeight = useCallback((date: string, weightKg: number, waistCircumferenceCm: number | null = null) => update((current) => {
     const withoutDemo = current.measurements.filter((item) => !item.isDemo);
@@ -285,7 +331,19 @@ export function useAppData() {
     }),
   })), [update]);
 
-  const updateProfile = useCallback((profile: UserProfile) => update((current) => ({ ...current, profile })), [update]);
+  const updateProfile = useCallback((profile: UserProfile) => update((current) => {
+    const targetsChanged = profile.calorieTarget !== current.profile.calorieTarget
+      || profile.proteinTarget !== current.profile.proteinTarget
+      || profile.carbTarget !== current.profile.carbTarget
+      || profile.fatTarget !== current.profile.fatTarget;
+    return {
+      ...current,
+      profile,
+      nutritionTargetHistory: targetsChanged
+        ? upsertTargetSnapshot(current.nutritionTargetHistory, nutritionTargetFromProfile(profile, toDateKey(), detectedTimezone()))
+        : current.nutritionTargetHistory,
+    };
+  }), [update]);
 
   const updateProgramDay = useCallback((day: WorkoutDay) => update((current) => {
     const next = { ...current, program: current.program.map((item) => item.id === day.id ? day : item) };
@@ -432,10 +490,10 @@ export function useAppData() {
   }, [data.foodLog]);
 
   return useMemo(() => ({
-    data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal,
+    data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings,
     saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
     startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate,
-  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
+  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings, saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, resetDemo, totalsForDate]);
 }
 
 export type AppController = ReturnType<typeof useAppData>;

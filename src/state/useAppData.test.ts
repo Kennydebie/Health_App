@@ -15,11 +15,12 @@ describe('app data migration', () => {
     const original = {
       foodLog: structuredClone(saved.foodLog), favorites: structuredClone(saved.favorites), recentFoodIds: structuredClone(saved.recentFoodIds),
       savedMeals: structuredClone(saved.savedMeals), measurements: structuredClone(saved.measurements), sessions: structuredClone(saved.sessions), habits: structuredClone(saved.habits),
+      nutritionTargetHistory: structuredClone(saved.nutritionTargetHistory), nutritionSettings: structuredClone(saved.nutritionSettings), nutritionDayRecords: structuredClone(saved.nutritionDayRecords),
     };
 
     const migrated = migrateAppData(saved);
 
-    expect(migrated.version).toBe(8);
+    expect(migrated.version).toBe(9);
     expect(migrated.program).toHaveLength(7);
     expect(migrated.program.filter((day) => !day.isRestDay).map((day) => day.title)).toEqual(['Upper A', 'Lower A', 'Upper B', 'Lower B']);
     expect(migrated.profile).toMatchObject({ balanceLevel: 'beginner', trainingTemplate: 'four-day-upper-lower' });
@@ -27,6 +28,9 @@ describe('app data migration', () => {
     expect(migrated.favorites).toEqual(original.favorites);
     expect(migrated.recentFoodIds).toEqual(original.recentFoodIds);
     expect(migrated.savedMeals).toEqual(original.savedMeals);
+    expect(migrated.nutritionTargetHistory).toEqual(original.nutritionTargetHistory);
+    expect(migrated.nutritionSettings).toEqual(original.nutritionSettings);
+    expect(migrated.nutritionDayRecords).toEqual(original.nutritionDayRecords);
     expect(migrated.measurements).toEqual(original.measurements);
     expect(withoutWorkoutIds(migrated.sessions)).toEqual(withoutWorkoutIds(original.sessions));
     expect(migrated.sessions.every((session) => Boolean(session.workoutId))).toBe(true);

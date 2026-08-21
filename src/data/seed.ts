@@ -2,6 +2,7 @@ import { defaultProgram } from './exercises';
 import { shiftDate, toDateKey } from '../lib/date';
 import { DEFAULT_BODY_GOALS } from '../lib/bodyMeasurements';
 import { DEFAULT_TRAINING_PLANNER } from '../lib/adaptivePlanner';
+import { DEFAULT_NUTRITION_SETTINGS, detectedTimezone, nutritionTargetFromProfile } from '../lib/nutritionEvaluation';
 import type { AppData, BodyMeasurement, FoodLogEntry, WorkoutSession } from '../types/models';
 
 const now = new Date().toISOString();
@@ -69,16 +70,20 @@ const demoSessions: WorkoutSession[] = [
 ];
 
 export function createSeedData(): AppData {
-  return {
-    version: 8,
-    profile: {
+  const profile: AppData['profile'] = {
       name: 'Kenny', age: 29, sex: 'male', heightCm: 174, goalWeightKg: 75,
       calorieTarget: 2100, proteinTarget: 170, carbTarget: 205, fatTarget: 67,
       trainingDays: ['Monday', 'Tuesday', 'Thursday', 'Saturday'], units: 'metric',
       equipment: ['Adjustable dumbbells', 'Barbell', 'Bench', 'Dip setup', 'Bodyweight'],
       balanceLevel: 'beginner', trainingTemplate: 'four-day-upper-lower',
-    },
+  };
+  return {
+    version: 9,
+    profile,
     foodLog: structuredClone(foodLog),
+    nutritionTargetHistory: [nutritionTargetFromProfile(profile, shiftDate(today, -1), detectedTimezone())],
+    nutritionSettings: structuredClone(DEFAULT_NUTRITION_SETTINGS),
+    nutritionDayRecords: [],
     favorites: ['chicken', 'greek-yogurt', 'whey', 'banana'],
     recentFoodIds: ['chicken', 'wrap', 'greek-yogurt', 'whey', 'banana'],
     savedMeals: [{ id: 'protein-yogurt-bowl', name: 'Protein yogurt bowl', items: [
