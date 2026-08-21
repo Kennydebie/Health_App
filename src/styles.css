@@ -590,12 +590,18 @@ input:focus, select:focus { border-color: rgba(240,138,120,.7); box-shadow: 0 0 
 
 .exercise-visual-button { width: 100%; aspect-ratio: 16 / 9; }
 .inline-video-player { position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border: 1px solid rgba(240,138,120,.2); border-radius: 16px; background: #050708; box-shadow: 0 14px 34px rgba(0,0,0,.24); }
+.active-exercise-hero.video-playing { grid-template-columns: minmax(500px, 580px) minmax(280px, 1fr); align-items: start; }
 .inline-video-player iframe { width: 100%; height: 100%; display: block; border: 0; }
 .inline-video-player > button { position: absolute; z-index: 2; top: 8px; right: 8px; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; color: var(--text); border: 1px solid rgba(255,255,255,.16); border-radius: 9px; background: rgba(8,13,18,.82); backdrop-filter: blur(10px); }
 .inline-technique-guide { width: fit-content; min-height: 34px; display: flex; align-items: center; gap: 7px; margin-top: 15px; padding: 0 11px; color: var(--coral); border: 1px solid rgba(240,138,120,.2); border-radius: 10px; background: var(--coral-soft); font-size: 10px; font-weight: 750; }
 .inline-technique-guide:hover { border-color: rgba(240,138,120,.42); background: rgba(240,138,120,.16); }
 
+@media (max-width: 920px) {
+  .active-exercise-hero.video-playing { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 700px) {
+  .active-exercise-hero.video-playing { grid-template-columns: 1fr; }
   .exercise-visual-button { min-height: 0; }
   .exercise-visual-button img { height: 100%; }
   .inline-video-player { min-height: 180px; }
