@@ -8,6 +8,8 @@ interface AppShellProps {
   setPage: (page: Page) => void;
   children: ReactNode;
   name: string;
+  planWeek: number;
+  trainingStreak: number;
 }
 
 const navItems = [
@@ -18,7 +20,7 @@ const navItems = [
   { id: 'profile' as const, label: 'Profile', Icon: Settings2 },
 ];
 
-export function AppShell({ page, setPage, children, name }: AppShellProps) {
+export function AppShell({ page, setPage, children, name, planWeek, trainingStreak }: AppShellProps) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -26,16 +28,16 @@ export function AppShell({ page, setPage, children, name }: AppShellProps) {
           <span className="brand-mark"><Sparkles size={18} /></span><span><strong>CUT</strong> FORWARD</span>
         </button>
         <nav aria-label="Primary navigation">
-          {navItems.map(({ id, label, Icon }) => <button key={id} type="button" className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon size={20} /><span>{label}</span></button>)}
+          {navItems.map(({ id, label, Icon }) => <button key={id} type="button" data-page={id} aria-label={label} aria-current={page === id ? 'page' : undefined} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon size={20} /><span>{label}</span></button>)}
         </nav>
         <div className="sidebar-coach">
           <div className="avatar">{name.charAt(0).toUpperCase()}</div>
-          <div><span>Personal plan</span><strong>{name}</strong></div>
+          <div><span>Week {planWeek} · {trainingStreak} week streak</span><strong>{name}</strong></div>
         </div>
       </aside>
       <main className="main-content">{children}</main>
       <nav className="bottom-nav" aria-label="Mobile primary navigation">
-        {navItems.map(({ id, label, Icon }) => <button key={id} type="button" className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon size={21} /><span>{label}</span></button>)}
+        {navItems.map(({ id, label, Icon }) => <button key={id} type="button" data-page={id} aria-label={label} aria-current={page === id ? 'page' : undefined} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon size={21} /><span>{label}</span></button>)}
       </nav>
     </div>
   );

@@ -9,6 +9,7 @@ interface FoodImageProps {
 
 export function FoodImage({ src, alt, className = '' }: FoodImageProps) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   if (failed) return <div className={`food-image food-image--fallback ${className}`} role="img" aria-label={`${alt} image unavailable`}><Utensils size={20} /></div>;
-  return <img className={`food-image ${className}`} src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} />;
+  return <img className={`food-image ${loaded ? 'is-loaded' : 'is-loading'} ${className}`} src={src} alt={alt} loading="lazy" decoding="async" onLoad={() => setLoaded(true)} onError={() => setFailed(true)} />;
 }

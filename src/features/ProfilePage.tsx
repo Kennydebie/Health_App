@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Calculator, Check, ChevronRight, Dumbbell, RefreshCcw, Save, Settings2, ShieldCheck, Target, UserRound } from 'lucide-react';
+import { Activity, Calculator, Check, ChevronRight, Dumbbell, RefreshCcw, Save, Settings2, ShieldCheck, Target, UserRound } from 'lucide-react';
 import { Modal } from '../components/Modal';
+import { activePlanWeek, trainingWeekStreak, weeklyConsistency } from '../lib/engagement';
 import type { AppController } from '../state/useAppData';
 import type { UserProfile } from '../types/models';
 
@@ -25,6 +26,9 @@ export function ProfilePage({ controller }: ProfilePageProps) {
   const [recommendOpen, setRecommendOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const recommendations = useMemo(() => recommendedTargets(draft), [draft]);
+  const planWeek = activePlanWeek(controller.data.weights);
+  const trainingStreak = trainingWeekStreak(controller.data.sessions);
+  const consistency = weeklyConsistency(controller.data);
   const setNumber = (key: keyof UserProfile, value: number) => setDraft((current) => ({ ...current, [key]: value }));
   const valid = draft.name.trim().length > 0 && draft.age >= 18 && draft.heightCm > 100 && draft.currentWeightKg > 30 && draft.goalWeightKg > 30 && draft.calorieTarget >= 1000 && draft.proteinTarget > 0 && draft.carbTarget >= 0 && draft.fatTarget > 0;
 
@@ -55,7 +59,7 @@ export function ProfilePage({ controller }: ProfilePageProps) {
         <article className="card settings-section"><header><span className="metric-icon orange"><Dumbbell size={19} /></span><div><p className="eyebrow">Training</p><h2>Schedule & equipment</h2></div></header><div className="choice-section"><span>Preferred training days</span><div className="choice-chips">{dayOptions.map((day) => <button type="button" key={day} className={draft.trainingDays.includes(day) ? 'active' : ''} onClick={() => setDraft((current) => ({ ...current, trainingDays: current.trainingDays.includes(day) ? current.trainingDays.filter((item) => item !== day) : [...current.trainingDays, day] }))}>{draft.trainingDays.includes(day) ? <Check size={14} /> : null}{day.slice(0, 3)}</button>)}</div></div><div className="choice-section"><span>Available equipment</span><div className="equipment-list">{equipmentOptions.map((item) => <button type="button" key={item} className={draft.equipment.includes(item) ? 'active' : ''} onClick={() => setDraft((current) => ({ ...current, equipment: current.equipment.includes(item) ? current.equipment.filter((value) => value !== item) : [...current.equipment, item] }))}><i>{draft.equipment.includes(item) ? <Check size={15} /> : null}</i>{item}</button>)}</div></div></article>
       </div>
 
-      <aside className="settings-aside"><article className="profile-summary"><div className="profile-avatar">{draft.name.charAt(0).toUpperCase()}</div><p className="eyebrow">Primary outcome</p><h2>Lose fat.<br />Keep the muscle.</h2><div><span><strong>{draft.currentWeightKg}</strong> kg now</span><ChevronRight size={18} /><span><strong>{draft.goalWeightKg}</strong> kg goal</span></div></article><article className="card data-card"><Settings2 size={20} /><h3>Your data stays here</h3><p>This prototype stores profile, food, weight and workout data in this browser using versioned local storage.</p></article><button type="button" className="reset-button" onClick={() => setResetOpen(true)}><RefreshCcw size={17} /> Restore sample data</button></aside>
+      <aside className="settings-aside"><article className="profile-summary"><div className="profile-avatar">{draft.name.charAt(0).toUpperCase()}</div><p className="eyebrow">Primary outcome</p><h2>Lose fat.<br />Keep the muscle.</h2><div><span><strong>{draft.currentWeightKg}</strong> kg now</span><ChevronRight size={18} /><span><strong>{draft.goalWeightKg}</strong> kg goal</span></div><section className="profile-plan-status"><span><Target size={15} /><strong>Week {planWeek}</strong><small>active plan</small></span><span><Dumbbell size={15} /><strong>{trainingStreak}</strong><small>week streak</small></span><span><Activity size={15} /><strong>{consistency.percent}%</strong><small>consistency</small></span></section></article><article className="card data-card"><Settings2 size={20} /><h3>Your data stays here</h3><p>Profile, food, weight and workout records remain in this browser through the versioned local-storage migration.</p></article><button type="button" className="reset-button" onClick={() => setResetOpen(true)}><RefreshCcw size={17} /> Restore sample data</button></aside>
     </section>
 
     <Modal open={recommendOpen} onClose={() => setRecommendOpen(false)} title="Recommended starting targets" subtitle="A moderate estimate based on your profile—not an automatic overwrite.">

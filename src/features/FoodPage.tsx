@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, ChevronLeft, ChevronRight, CirclePlus, Copy, Flame, Heart, Pencil, Plus, RotateCcw, Search, Star, Trash2, UtensilsCrossed, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, CirclePlus, Coffee, Cookie, Copy, Flame, Heart, MoonStar, Pencil, Plus, RotateCcw, Search, Star, Sun, Trash2, UtensilsCrossed, X } from 'lucide-react';
 import { FoodImage } from '../components/FoodImage';
 import { Modal } from '../components/Modal';
+import { ToneIcon, type VisualTone } from '../components/Visuals';
 import { foodMap, foods } from '../data/foods';
 import { prettyDate, relativeDay, shiftDate, toDateKey } from '../lib/date';
 import { entryMacros, roundMacro, servingAmount } from '../lib/nutrition';
@@ -14,6 +15,13 @@ const meals: Array<{ id: MealType; label: string; time: string }> = [
   { id: 'dinner', label: 'Dinner', time: 'Evening' },
   { id: 'snacks', label: 'Snacks', time: 'Any time' },
 ];
+
+const mealVisuals: Record<MealType, { Icon: typeof Coffee; tone: VisualTone }> = {
+  breakfast: { Icon: Coffee, tone: 'amber' },
+  lunch: { Icon: Sun, tone: 'blue' },
+  dinner: { Icon: MoonStar, tone: 'violet' },
+  snacks: { Icon: Cookie, tone: 'coral' },
+};
 
 interface FoodPageProps { controller: AppController; }
 
@@ -111,15 +119,15 @@ export function FoodPage({ controller }: FoodPageProps) {
         <button type="button" className="icon-button" onClick={() => setDate((current) => shiftDate(current, 1))} aria-label="Next day"><ChevronRight size={20} /></button>
       </section>
 
-      <section className="nutrition-summary">
+      <section className="nutrition-summary premium-nutrition-summary">
         <div className="calorie-summary">
           <span className="metric-icon lime"><Flame size={20} /></span>
           <div><p>{remaining >= 0 ? 'Calories remaining' : 'Calories over target'}</p><strong className={remaining < 0 ? 'text-warning' : ''}>{Math.abs(Math.round(remaining))}</strong></div>
           <span>{Math.round(totals.calories).toLocaleString()} / {data.profile.calorieTarget.toLocaleString()} kcal</span>
         </div>
-        <div className="nutrition-summary__macro"><p>Protein <span>{Math.round(totals.protein)} / {data.profile.proteinTarget} g</span></p><div><span className="lime" style={{ width: `${Math.min(100, totals.protein / data.profile.proteinTarget * 100)}%` }} /></div></div>
-        <div className="nutrition-summary__macro"><p>Carbs <span>{Math.round(totals.carbs)} / {data.profile.carbTarget} g</span></p><div><span className="blue" style={{ width: `${Math.min(100, totals.carbs / data.profile.carbTarget * 100)}%` }} /></div></div>
-        <div className="nutrition-summary__macro"><p>Fat <span>{Math.round(totals.fat)} / {data.profile.fatTarget} g</span></p><div><span className="orange" style={{ width: `${Math.min(100, totals.fat / data.profile.fatTarget * 100)}%` }} /></div></div>
+        <div className="nutrition-summary__macro protein"><p>Protein <span>{Math.round(totals.protein)} / {data.profile.proteinTarget} g</span></p><div><span className="blue" style={{ width: `${Math.min(100, totals.protein / data.profile.proteinTarget * 100)}%` }} /></div><small>{Math.max(0, Math.round(data.profile.proteinTarget - totals.protein))} g remaining</small></div>
+        <div className="nutrition-summary__macro carbs"><p>Carbohydrates <span>{Math.round(totals.carbs)} / {data.profile.carbTarget} g</span></p><div><span className="amber" style={{ width: `${Math.min(100, totals.carbs / data.profile.carbTarget * 100)}%` }} /></div><small>{Math.max(0, Math.round(data.profile.carbTarget - totals.carbs))} g remaining</small></div>
+        <div className="nutrition-summary__macro fat"><p>Fat <span>{Math.round(totals.fat)} / {data.profile.fatTarget} g</span></p><div><span className="violet" style={{ width: `${Math.min(100, totals.fat / data.profile.fatTarget * 100)}%` }} /></div><small>{Math.max(0, Math.round(data.profile.fatTarget - totals.fat))} g remaining</small></div>
       </section>
 
       <section className="food-quickbar">
@@ -131,12 +139,15 @@ export function FoodPage({ controller }: FoodPageProps) {
         <div className="recent-foods"><span>Recent</span>{data.recentFoodIds.slice(0, 4).map((id) => { const food = foodMap.get(id); return food ? <button type="button" key={id} onClick={() => { setSelectedFood(food); setDefaultMeal('snacks'); setAddOpen(true); }}><FoodImage src={food.image} alt={food.name} /><span>{food.name}</span></button> : null; })}</div>
       </section>
 
-      <section className="meal-grid">
+      <section className="frequent-foods" aria-label="Frequently used foods"><div><p className="eyebrow">Frequent foods</p><h2>Quick, familiar choices</h2></div><div>{data.favorites.slice(0, 5).map((id) => { const food = foodMap.get(id); return food ? <button type="button" key={id} onClick={() => { setSelectedFood(food); setDefaultMeal('snacks'); setAddOpen(true); }}><FoodImage src={food.image} alt={food.name} /><span><strong>{food.name}</strong><small>{food.protein} g protein / 100{food.unit}</small></span><Plus size={16} /></button> : null; })}</div></section>
+
+      <section className="meal-grid meal-timeline">
         {meals.map((meal) => {
           const entries = data.foodLog.filter((entry) => entry.date === date && entry.meal === meal.id);
           const mealMacros = entries.reduce((total, entry) => { const food = foodMap.get(entry.foodId); if (!food) return total; const macros = entryMacros(food, entry); return { calories: total.calories + macros.calories, protein: total.protein + macros.protein }; }, { calories: 0, protein: 0 });
-          return <article className="meal-card card" key={meal.id}>
-            <header><div><p className="eyebrow">{meal.time}</p><h2>{meal.label}</h2></div><div><strong>{Math.round(mealMacros.calories)}</strong><span>kcal · {Math.round(mealMacros.protein)}g protein</span></div></header>
+          const visual = mealVisuals[meal.id];
+          return <article className={`meal-card card meal-${meal.id}`} key={meal.id}>
+            <header><div className="meal-heading"><ToneIcon Icon={visual.Icon} tone={visual.tone} /><div><p className="eyebrow">{meal.time}</p><h2>{meal.label}</h2></div></div><div><strong>{Math.round(mealMacros.calories)}</strong><span>kcal · {Math.round(mealMacros.protein)}g protein</span></div></header>
             <div className="meal-items">
               {entries.length ? entries.map((entry) => {
                 const food = foodMap.get(entry.foodId); if (!food) return null;

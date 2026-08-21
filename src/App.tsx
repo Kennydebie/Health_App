@@ -2,6 +2,8 @@ import { lazy, Suspense, useState } from 'react';
 import { AppShell, type Page } from './components/AppShell';
 import { useAppData } from './state/useAppData';
 import type { WorkoutDay } from './types/models';
+import { PageSkeleton } from './components/Visuals';
+import { activePlanWeek, trainingWeekStreak } from './lib/engagement';
 
 const HomePage = lazy(() => import('./features/HomePage').then((module) => ({ default: module.HomePage })));
 const FoodPage = lazy(() => import('./features/FoodPage').then((module) => ({ default: module.FoodPage })));
@@ -24,8 +26,8 @@ export default function App() {
   };
 
   return (
-    <AppShell page={page} setPage={setPage} name={controller.data.profile.name}>
-      <Suspense fallback={<div className="page page-loading"><span /><p>Loading your plan…</p></div>}>
+    <AppShell page={page} setPage={setPage} name={controller.data.profile.name} planWeek={activePlanWeek(controller.data.weights)} trainingStreak={trainingWeekStreak(controller.data.sessions)}>
+      <Suspense fallback={<PageSkeleton />}>
         {page === 'home' ? <HomePage controller={controller} setPage={setPage} onStartWorkout={startWorkout} /> : null}
         {page === 'food' ? <FoodPage controller={controller} /> : null}
         {page === 'workout' ? <WorkoutPage controller={controller} activeSessionId={activeSessionId} setActiveSessionId={setActiveSessionId} onStartWorkout={startWorkout} /> : null}
