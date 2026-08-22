@@ -64,7 +64,7 @@ type LegacyMeasurement = Partial<BodyMeasurement> & {
   confidence?: BodyMeasurementConfidence & { timestamp?: number | null };
 };
 
-export type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals' | 'weightLossPlans' | 'trainingPlanner' | 'nutritionTargetHistory' | 'nutritionSettings' | 'nutritionDayRecords' | 'foodLibrary' | 'exerciseRestPreferences'> & {
+export type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals' | 'weightLossPlans' | 'trainingPlanner' | 'nutritionTargetHistory' | 'nutritionSettings' | 'nutritionDayRecords' | 'foodLibrary' | 'exerciseRestPreferences' | 'activeGoal' | 'coachingSettings' | 'activityLog' | 'plannedFoodEntries' | 'calorieReservations' | 'dayTemplates' | 'recoveryFeedback' | 'pausePeriods' | 'weeklyCheckIns' | 'coachRecommendations' | 'planChanges' | 'productEvents' | 'onboardingCompleted'> & {
   profile: UserProfile & { startWeightKg?: number; currentWeightKg?: number };
   measurements?: LegacyMeasurement[];
   bodyMeasurements?: LegacyMeasurement[];
@@ -77,6 +77,19 @@ export type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoal
   trainingPlanner?: Partial<TrainingPlannerState>;
   foodLibrary?: FoodItem[];
   exerciseRestPreferences?: Record<string, number>;
+  activeGoal?: AppData['activeGoal'];
+  coachingSettings?: Partial<AppData['coachingSettings']>;
+  activityLog?: AppData['activityLog'];
+  plannedFoodEntries?: AppData['plannedFoodEntries'];
+  calorieReservations?: AppData['calorieReservations'];
+  dayTemplates?: AppData['dayTemplates'];
+  recoveryFeedback?: AppData['recoveryFeedback'];
+  pausePeriods?: AppData['pausePeriods'];
+  weeklyCheckIns?: AppData['weeklyCheckIns'];
+  coachRecommendations?: AppData['coachRecommendations'];
+  planChanges?: AppData['planChanges'];
+  productEvents?: AppData['productEvents'];
+  onboardingCompleted?: boolean;
 };
 
 export const emptyMeasurementValues = {
@@ -183,6 +196,24 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
     squatProgression: legacy.squatProgression ?? fallback.squatProgression,
     progressionPlans: legacy.progressionPlans ?? [],
     exerciseRestPreferences: legacy.exerciseRestPreferences ?? {},
+    activeGoal: legacy.activeGoal ?? {
+      ...fallback.activeGoal,
+      startingWeightKg: measurements.find((item) => item.weightKg != null)?.weightKg ?? null,
+      targetWeightKg: profile.goalWeightKg,
+      targetRangeKg: [profile.goalWeightKg - .5, profile.goalWeightKg + .5],
+    },
+    coachingSettings: { ...fallback.coachingSettings, ...legacy.coachingSettings, version: 1 },
+    activityLog: legacy.activityLog ?? [],
+    plannedFoodEntries: legacy.plannedFoodEntries ?? [],
+    calorieReservations: legacy.calorieReservations ?? [],
+    dayTemplates: legacy.dayTemplates ?? [],
+    recoveryFeedback: legacy.recoveryFeedback ?? [],
+    pausePeriods: legacy.pausePeriods ?? [],
+    weeklyCheckIns: legacy.weeklyCheckIns ?? [],
+    coachRecommendations: legacy.coachRecommendations ?? [],
+    planChanges: legacy.planChanges ?? [],
+    productEvents: legacy.productEvents ?? [],
+    onboardingCompleted: legacy.onboardingCompleted ?? legacy.version < 12,
   };
   const template = base.profile.trainingTemplate;
   const program = base.program.map((day) => day.isRestDay ? { ...day, workoutId: undefined } : { ...day, workoutId: inferWorkoutId(day, template) });
@@ -194,6 +225,6 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
       ?? programByDay.get(legacySession.dayId)?.workoutId;
     return { ...session, workoutId: workoutId ?? `legacy_${legacySession.dayId}` };
   });
-  const migrated = { ...base, version: 11, program, sessions };
+  const migrated = { ...base, version: 12, program, sessions };
   return { ...migrated, trainingPlanner: recalculateTrainingWeek(migrated) };
 }

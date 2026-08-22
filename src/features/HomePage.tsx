@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { ArrowRight, CalendarDays, ChevronRight, Dumbbell, Flame, HeartPulse, Play, Scale, Sparkles, Target, TrendingDown, Utensils } from 'lucide-react';
+import { ArrowRight, CalendarDays, ChevronRight, Dumbbell, Flame, Footprints, HeartPulse, Play, Scale, Sparkles, Target, TrendingDown, Utensils } from 'lucide-react';
 import { ProgressRing } from '../components/ProgressRing';
 import { MacroMeter, ToneIcon, WeekStrip, type WeekStripItem } from '../components/Visuals';
 import type { Page } from '../components/AppShell';
@@ -14,6 +14,7 @@ import type { AppController } from '../state/useAppData';
 import type { SessionTemplateId } from '../types/models';
 import { getDashboardSummary } from '../lib/selectors';
 import { greetingForHour } from '../lib/greeting';
+import { buildDailyCoach, decideWeeklyCoach } from '../lib/coachingEngine';
 
 interface HomePageProps { controller: AppController; setPage: (page: Page) => void; onStartWorkout: (templateId: SessionTemplateId, date?: string) => void; }
 
@@ -44,9 +45,10 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
   const selectedTemplateId = todayPlan?.plan?.selectedSessionTemplateId ?? workoutDay.workoutId ?? 'cardio_recovery';
   const startWarnings = plannerWarnings(data, today, selectedTemplateId, todayPlan?.plan?.readinessResponse);
   const completedToday = !workoutDay.isRestDay && todayPlan?.status === 'completed';
-  const cardioToday = data.cardioLog.filter((entry) => entry.date === today).reduce((sum, entry) => sum + entry.minutes, 0);
   const weightMeasurementCount = weightHistory(data.measurements).length;
-  const coach = weightSummary(weightMeasurementCount, trend.currentAverage, trend.previousAverage, trend.weeklyChange);
+  const weightCoach = weightSummary(weightMeasurementCount, trend.currentAverage, trend.previousAverage, trend.weeklyChange);
+  const dailyCoach = useMemo(() => buildDailyCoach(data, today, currentHour), [data, today, currentHour]);
+  const weeklyCoach = useMemo(() => decideWeeklyCoach(data, today), [data, today]);
   const caloriesRemaining = profile.calorieTarget - totals.calories;
   const proteinRemaining = profile.proteinTarget - totals.protein;
   const consistency = dashboard.weekly;
@@ -76,6 +78,10 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
 
   const action = activeSession
     ? { label: 'Continue workout', Icon: Play, run: () => setPage('workout') }
+    : dailyCoach.status === 'check_in_due'
+      ? { label: 'Complete weekly check-in', Icon: Sparkles, run: () => setPage('coach') }
+      : dailyCoach.title === 'Close the protein gap'
+        ? { label: 'Plan the next meal', Icon: Utensils, run: () => setPage('food') }
     : !workoutDay.isRestDay && !completedToday
       ? startWarnings.length
         ? { label: `Review ${displayWorkoutTitle(workoutDay)}`, Icon: Flame, run: () => setPage('workout') }
@@ -92,7 +98,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
         <div className="daily-command__meta"><span>Week {week}</span><span>{prettyDate(today, true)}</span></div>
         <p className="eyebrow">Goal: {profile.goalWeightKg} kg</p>
         <h1>{greeting}, {profile.name}</h1>
-        <p className="daily-objective">Today’s recommendation: <strong>{workoutDay.isRestDay ? displayWorkoutTitle(workoutDay).toLowerCase() : `${displayWorkoutTitle(workoutDay).toLowerCase()} with controlled effort`}</strong>. {todayPlan?.plan?.recommendationReason}</p>
+        <p className="daily-objective"><strong>{dailyCoach.title}.</strong> {dailyCoach.instruction}</p>
         <button className="primary-button command-action" type="button" onClick={action.run}><ActionIcon size={19} /> {action.label}<ArrowRight size={18} /></button>
       </div>
       <div className="daily-score">
@@ -126,7 +132,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
         <article className="glance-card calories"><ToneIcon Icon={Flame} tone="coral" /><div><span>Calories remaining</span><strong>{Math.max(0, Math.round(caloriesRemaining)).toLocaleString()}<small> kcal</small></strong></div></article>
         <article className="glance-card protein"><ToneIcon Icon={Target} tone="blue" /><div><span>Protein remaining</span><strong>{Math.max(0, Math.round(proteinRemaining))}<small> g</small></strong></div></article>
         <article className="glance-card training"><ToneIcon Icon={workoutDay.isRestDay ? HeartPulse : Dumbbell} tone={workoutDay.isRestDay ? 'teal' : 'coral'} /><div><span>{workoutDay.isRestDay ? 'Recovery today' : 'Training today'}</span><strong>{displayWorkoutTitle(workoutDay)}</strong><small>{workoutDay.duration}</small></div></article>
-        <article className="glance-card cardio"><ToneIcon Icon={HeartPulse} tone="cyan" /><div><span>Cardio today</span><strong>{cardioToday}<small> min</small></strong><small>{workoutDay.cardioTargetMinutes ? `${Math.max(0, workoutDay.cardioTargetMinutes - cardioToday)} min planned` : 'Short walks still count'}</small></div></article>
+        <article className="glance-card cardio"><ToneIcon Icon={Footprints} tone="cyan" /><div><span>Activity today</span><strong>{data.activityLog.find((entry) => entry.date === today)?.steps.toLocaleString() ?? '—'}<small> steps</small></strong><small>{dailyCoach.stepsRemaining == null ? 'Add today’s steps' : `${dailyCoach.stepsRemaining.toLocaleString()} remaining`}</small></div></article>
         <article className="glance-card adherence"><ToneIcon Icon={CalendarDays} tone="lime" /><div><span>Weekly adherence</span><strong>{consistency.percent}<small>%</small></strong><small>{consistency.nutritionDays} nutrition days logged</small></div></article>
       </div>
     </section>
@@ -144,7 +150,7 @@ export function HomePage({ controller, setPage, onStartWorkout }: HomePageProps)
         <div className="trend-summary">{weightMeasurementCount >= 2 ? <><strong>{trend.currentAverage.toFixed(1)} kg</strong><span className={trend.weeklyChange <= 0 ? 'trend-down' : ''}><TrendingDown size={15} /> {trend.previousAverage ? `${Math.abs(trend.weeklyChange).toFixed(2)} kg / week` : 'More history needed'}</span></> : null}<button type="button" className="text-button" onClick={() => setPage('progress')}>View progress <ChevronRight size={16} /></button></div>
       </article>
 
-      <article className={`coach-card premium-coach ${coach.tone}`}><div className="coach-orb"><Sparkles size={22} /></div><div><p className="eyebrow">Weight summary</p><h3>{coach.title}</h3><p>{coach.text}</p></div></article>
+      <article className={`coach-card premium-coach ${weightCoach.tone}`}><div className="coach-orb"><Sparkles size={22} /></div><div><p className="eyebrow">Weekly coach · {weeklyCoach.confidence} confidence</p><h3>{weeklyCoach.title}</h3><p>{weeklyCoach.explanation}</p><button type="button" className="text-button" onClick={() => setPage('coach')}>Review evidence and decision <ChevronRight size={16} /></button></div></article>
     </section>
   </div>;
 }

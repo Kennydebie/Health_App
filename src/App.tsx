@@ -5,8 +5,10 @@ import type { SessionTemplateId } from './types/models';
 import { PageSkeleton } from './components/Visuals';
 import { DataMigrationModal } from './features/DataBackups';
 import { getDashboardSummary } from './lib/selectors';
+import { OnboardingFlow } from './features/OnboardingFlow';
 
 const HomePage = lazy(() => import('./features/HomePage').then((module) => ({ default: module.HomePage })));
+const CoachPage = lazy(() => import('./features/CoachPage').then((module) => ({ default: module.CoachPage })));
 const FoodPage = lazy(() => import('./features/FoodPage').then((module) => ({ default: module.FoodPage })));
 const WorkoutPage = lazy(() => import('./features/WorkoutPage').then((module) => ({ default: module.WorkoutPage })));
 const ProgressPage = lazy(() => import('./features/ProgressPage').then((module) => ({ default: module.ProgressPage })));
@@ -37,6 +39,7 @@ export default function App() {
     <AppShell page={page} setPage={navigate} name={controller.data.profile.name} planWeek={summary.planWeek} trainingStreak={summary.streak.weeks}>
       <Suspense fallback={<PageSkeleton />}>
         {page === 'home' ? <HomePage controller={controller} setPage={navigate} onStartWorkout={startWorkout} /> : null}
+        {page === 'coach' ? <CoachPage controller={controller} /> : null}
         {page === 'food' ? <FoodPage controller={controller} /> : null}
         {page === 'workout' ? <WorkoutPage controller={controller} activeSessionId={activeSessionId} setActiveSessionId={setActiveSessionId} onStartWorkout={startWorkout} /> : null}
         {page === 'progress' ? <ProgressPage key={progressVisit} controller={controller} /> : null}
@@ -44,5 +47,6 @@ export default function App() {
       </Suspense>
     </AppShell>
     <DataMigrationModal controller={controller} />
+    <OnboardingFlow controller={controller} />
   </>;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Barcode, CalendarDays, Camera, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CirclePlus, Coffee, Cookie, Copy, Database, Heart, LoaderCircle, MoonStar, Pencil, Plus, RotateCcw, Search, Settings2, Sparkles, Star, Sun, Trash2, UtensilsCrossed, X } from 'lucide-react';
+import { Barcode, CalendarDays, Camera, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CirclePlus, ClipboardList, Coffee, Cookie, Copy, Database, Heart, LoaderCircle, MoonStar, Pencil, Plus, RotateCcw, Search, Settings2, Sparkles, Star, Sun, Trash2, UtensilsCrossed, X } from 'lucide-react';
 import { FoodImage } from '../components/FoodImage';
 import { Modal } from '../components/Modal';
 import { ToneIcon, type VisualTone } from '../components/Visuals';
@@ -11,6 +11,7 @@ import { evaluateNutritionDay, targetSnapshotForDate } from '../lib/nutritionEva
 import type { AppController } from '../state/useAppData';
 import type { FoodItem, FoodLogEntry, MealType } from '../types/models';
 import { NutritionCalendar, NutritionGoalBars, NutritionSettingsModal, NutritionTrends } from './NutritionOverview';
+import { DayPlanner } from './DayPlanner';
 
 const meals: Array<{ id: MealType; label: string }> = [
   { id: 'breakfast', label: 'Breakfast' },
@@ -202,7 +203,8 @@ export function FoodPage({ controller }: FoodPageProps) {
   const [quickOpen, setQuickOpen] = useState(false);
   const [saveMealType, setSaveMealType] = useState<MealType | null>(null);
   const [saveMealName, setSaveMealName] = useState('');
-  const [view, setView] = useState<'diary' | 'calendar' | 'trends'>(() => (localStorage.getItem('project75-nutrition-view') as 'diary' | 'calendar' | 'trends' | null) ?? 'diary');
+  const [view, setView] = useState<'diary' | 'plan' | 'calendar' | 'trends'>(() => (localStorage.getItem('project75-nutrition-view') as 'diary' | 'plan' | 'calendar' | 'trends' | null) ?? 'diary');
+  const [addMode, setAddMode] = useState<'diary' | 'plan'>('diary');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const totals = totalsForDate(date);
   const selectedEvaluation = evaluateNutritionDay({ date, today: toDateKey(), totals, target: targetSnapshotForDate(data.nutritionTargetHistory, data.profile, date), settings: data.nutritionSettings, record: data.nutritionDayRecords.find((item) => item.date === date) });
@@ -221,16 +223,16 @@ export function FoodPage({ controller }: FoodPageProps) {
     return () => { controller.abort(); window.clearTimeout(timer); };
   }, [query, browserTab]);
 
-  const openAdd = (meal: MealType) => { setDefaultMeal(meal); setSelectedFood(null); setCorrectingFood(null); setQuery(''); setBrowserTab('search'); setAddOpen(true); };
+  const openAdd = (meal: MealType, mode: 'diary' | 'plan' = 'diary') => { setAddMode(mode); setDefaultMeal(meal); setSelectedFood(null); setCorrectingFood(null); setQuery(''); setBrowserTab('search'); setAddOpen(true); };
   const closeAdd = () => { setAddOpen(false); setSelectedFood(null); setCorrectingFood(null); };
-  const selectView = (next: 'diary' | 'calendar' | 'trends') => { setView(next); localStorage.setItem('project75-nutrition-view', next); };
+  const selectView = (next: 'diary' | 'plan' | 'calendar' | 'trends') => { setView(next); localStorage.setItem('project75-nutrition-view', next); };
   const chooseFood = (food: FoodItem) => { setSelectedFood(food); setCorrectingFood(null); if (food.source?.provider !== 'local' && !data.foodLibrary.some((item) => item.id === food.id)) saveFoodToLibrary({ ...food, isCached: true }); };
   const toggleFoodFavorite = (food: FoodItem) => { if (food.source?.provider !== 'local' && !data.foodLibrary.some((item) => item.id === food.id)) saveFoodToLibrary({ ...food, isCached: true }); toggleFavorite(food.id); };
   const customFoods = data.foodLibrary.filter((food) => food.isCustom);
 
   return <div className="page food-page">
-    <header className="page-header food-header"><div><h1>Nutrition</h1><p>Log meals and review daily, weekly and monthly goal adherence.</p></div><div className="nutrition-header-actions"><button className="secondary-button" type="button" onClick={() => setSettingsOpen(true)}><Settings2 size={17}/> Settings</button><button className="primary-button" type="button" onClick={() => { selectView('diary'); openAdd('breakfast'); }}><Plus size={19}/> Add food</button></div></header>
-    <nav className="nutrition-tabs" aria-label="Nutrition sections" role="tablist">{(['diary', 'calendar', 'trends'] as const).map((tab) => <button type="button" role="tab" key={tab} aria-selected={view === tab} className={view === tab ? 'active' : ''} onClick={() => selectView(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
+    <header className="page-header food-header"><div><h1>Nutrition</h1><p>Plan ahead, log what you actually eat, and review goal adherence without guessing.</p></div><div className="nutrition-header-actions"><button className="secondary-button" type="button" onClick={() => setSettingsOpen(true)}><Settings2 size={17}/> Settings</button><button className="secondary-button" type="button" onClick={() => selectView('plan')}><ClipboardList size={17}/> Plan my day</button><button className="primary-button" type="button" onClick={() => { selectView('diary'); openAdd('breakfast'); }}><Plus size={19}/> Add food</button></div></header>
+    <nav className="nutrition-tabs" aria-label="Nutrition sections" role="tablist">{(['diary', 'plan', 'calendar', 'trends'] as const).map((tab) => <button type="button" role="tab" key={tab} aria-selected={view === tab} className={view === tab ? 'active' : ''} onClick={() => selectView(tab)}>{tab === 'plan' ? 'Plan my day' : tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
 
     {view === 'diary' ? <>
       <section className="date-strip"><button type="button" className="icon-button" onClick={() => setDate((current) => shiftDate(current, -1))} aria-label="Previous day"><ChevronLeft size={20}/></button><button type="button" className="date-chip secondary" onClick={() => setDate(shiftDate(date, -1))}><span>{relativeDay(shiftDate(date, -1))}</span><small>{prettyDate(shiftDate(date, -1))}</small></button><label className="date-chip active"><CalendarDays size={18}/><span>{relativeDay(date)}</span><small>{prettyDate(date, true)}</small><input type="date" value={date} onChange={(event) => setDate(event.target.value)} aria-label="Choose diary date"/></label><button type="button" className="date-chip secondary" onClick={() => setDate(shiftDate(date, 1))}><span>{relativeDay(shiftDate(date, 1))}</span><small>{prettyDate(shiftDate(date, 1))}</small></button><button type="button" className="icon-button" onClick={() => setDate((current) => shiftDate(current, 1))} aria-label="Next day"><ChevronRight size={20}/></button></section>
@@ -244,11 +246,12 @@ export function FoodPage({ controller }: FoodPageProps) {
         return <article className={`meal-card card meal-${meal.id}`} key={meal.id}><header><div className="meal-heading"><ToneIcon Icon={visual.Icon} tone={visual.tone}/><div><h2>{meal.label}</h2></div></div><div><strong>{Math.round(mealMacros.calories)}</strong><span>kcal · {Math.round(mealMacros.protein)}g protein</span></div></header><div className="meal-items">{entries.length ? entries.map((entry) => { const food = foodForEntry(data, entry); if (!food) return null; const macros = entryMacros(food, entry); const amount = servingAmount(food, entry); return <button type="button" className="food-row" key={entry.id} onClick={() => setEditEntry(entry)}><FoodImage src={entry.snapshot?.image ?? food.image} alt={entry.snapshot?.foodName ?? food.name}/><div><strong>{entry.snapshot?.foodName ?? food.name}</strong><span>{Math.round(amount)} {entry.snapshot?.unit ?? food.unit} · {roundMacro(macros.protein)}g protein</span></div><p><strong>{Math.round(macros.calories)}</strong><span>kcal</span></p><Pencil size={16}/></button>; }) : <div className="empty-meal"><UtensilsCrossed size={22}/><p>No food logged<span>Use “Add to {meal.label.toLowerCase()}” to add an item.</span></p></div>}</div><div className="meal-card-actions"><button type="button" className="add-meal-button" onClick={() => openAdd(meal.id)}><Plus size={17}/> Add to {meal.label.toLowerCase()}</button>{entries.length ? <button type="button" className="save-meal-button" onClick={() => { setSaveMealType(meal.id); setSaveMealName(`${meal.label} ${prettyDate(date)}`); }}><Heart size={15}/> Save meal</button> : null}</div></article>;
       })}</section>
     </> : null}
+    {view === 'plan' ? <DayPlanner controller={controller} date={date} onDateChange={setDate} onSearchFood={(meal) => openAdd(meal, 'plan')} /> : null}
     {view === 'calendar' ? <NutritionCalendar controller={controller} selectedDate={date} onSelectDate={setDate} onOpenDiary={(selected) => { setDate(selected); selectView('diary'); }} onAddFood={(selected) => { setDate(selected); selectView('diary'); openAdd('breakfast'); }} onEditEntry={(entry) => { setDate(entry.date); selectView('diary'); setEditEntry(entry); }}/> : null}
     {view === 'trends' ? <NutritionTrends controller={controller}/> : null}
 
-    <Modal open={addOpen} onClose={closeAdd} title={selectedFood ? 'Choose quantity' : correctingFood ? 'Correct food details' : 'Add food'} subtitle={selectedFood ? `Log ${selectedFood.name} to ${relativeDay(date).toLowerCase()}.` : correctingFood ? 'Save a verified personal copy without changing the provider record.' : 'Search a broad catalog, scan a barcode, or reuse your own foods and meals.'} size={selectedFood || correctingFood ? 'medium' : 'large'}>
-      {selectedFood ? <FoodForm food={selectedFood} defaultMeal={defaultMeal} submitLabel="Add to diary" onCorrect={() => { setCorrectingFood(selectedFood); setSelectedFood(null); }} onSave={(form) => { addFood({ ...form, foodId: selectedFood.id, date }, selectedFood); closeAdd(); }}/>
+    <Modal open={addOpen} onClose={closeAdd} title={selectedFood ? 'Choose quantity' : correctingFood ? 'Correct food details' : addMode === 'plan' ? 'Plan food' : 'Add food'} subtitle={selectedFood ? `${addMode === 'plan' ? 'Plan' : 'Log'} ${selectedFood.name} for ${relativeDay(date).toLowerCase()}.` : correctingFood ? 'Save a verified personal copy without changing the provider record.' : 'Search a broad catalog, scan a barcode, or reuse your own foods and meals.'} size={selectedFood || correctingFood ? 'medium' : 'large'}>
+      {selectedFood ? <FoodForm food={selectedFood} defaultMeal={defaultMeal} submitLabel={addMode === 'plan' ? 'Add to plan' : 'Add to diary'} onCorrect={() => { setCorrectingFood(selectedFood); setSelectedFood(null); }} onSave={(form) => { if (addMode === 'plan') controller.planFood({ ...form, foodId: selectedFood.id, date }); else addFood({ ...form, foodId: selectedFood.id, date }, selectedFood); closeAdd(); }}/>
       : correctingFood ? <CustomFoodForm base={correctingFood} onSave={(food) => { saveFoodToLibrary(food); setCorrectingFood(null); setSelectedFood(food); }}/>
       : <div className="food-browser">
         <nav className="food-browser-tabs" aria-label="Food browser">{([{ id: 'search', label: 'Search', Icon: Search }, { id: 'barcode', label: 'Barcode', Icon: Barcode }, { id: 'library', label: 'My foods', Icon: Heart }, { id: 'meals', label: 'Meals', Icon: UtensilsCrossed }, { id: 'create', label: 'Create', Icon: Plus }] as const).map(({ id, label, Icon }) => <button key={id} type="button" className={browserTab === id ? 'active' : ''} onClick={() => setBrowserTab(id)}><Icon size={16}/>{label}</button>)}</nav>

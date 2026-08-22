@@ -1,9 +1,14 @@
 import { createInitialData } from '../data/initialData';
 import type { AppData } from '../types/models';
 
-const COLLECTION_KEYS = [
+const CORE_COLLECTION_KEYS = [
   'foodLog', 'nutritionTargetHistory', 'nutritionDayRecords', 'favorites', 'recentFoodIds', 'savedMeals',
   'foodLibrary', 'measurements', 'weightLossPlans', 'program', 'sessions', 'habits', 'cardioLog', 'progressionPlans',
+] as const;
+
+const V12_COLLECTION_KEYS = [
+  'activityLog', 'plannedFoodEntries', 'calorieReservations', 'dayTemplates', 'recoveryFeedback', 'pausePeriods',
+  'weeklyCheckIns', 'coachRecommendations', 'planChanges', 'productEvents',
 ] as const;
 
 const fixtureFoodIds = new Set([
@@ -44,7 +49,9 @@ export function validateAppData(value: unknown) {
       if (typeof value.profile[key] !== 'number' || !Number.isFinite(value.profile[key])) errors.push(`Profile ${key} is invalid.`);
     }
   }
-  for (const key of COLLECTION_KEYS) {
+  const version = Number(value.version);
+  const collectionKeys = version >= 12 ? [...CORE_COLLECTION_KEYS, ...V12_COLLECTION_KEYS] : CORE_COLLECTION_KEYS;
+  for (const key of collectionKeys) {
     if (!Array.isArray(value[key])) errors.push(`${key} must be a list.`);
     else if (value[key].length > 100_000) errors.push(`${key} contains too many records.`);
   }
@@ -53,6 +60,11 @@ export function validateAppData(value: unknown) {
   if (!isRecord(value.trainingPlanner) || !Array.isArray(value.trainingPlanner.dailyPlans)) errors.push('Training planner is invalid.');
   if (!isRecord(value.squatProgression)) errors.push('Squat progression is invalid.');
   if (!isRecord(value.exerciseRestPreferences)) errors.push('Exercise rest preferences are invalid.');
+  if (version >= 12) {
+    if (!isRecord(value.activeGoal)) errors.push('Active goal is missing.');
+    if (!isRecord(value.coachingSettings)) errors.push('Coaching settings are missing.');
+    if (typeof value.onboardingCompleted !== 'boolean') errors.push('Onboarding status is invalid.');
+  }
   if (typeof value.weeklyCardioTarget !== 'number' || value.weeklyCardioTarget < 0 || value.weeklyCardioTarget > 2_000) errors.push('Weekly cardio target is invalid.');
   return { valid: errors.length === 0, errors };
 }
@@ -157,7 +169,7 @@ export function mergeAppData(remoteInput: AppData, localInput: AppData): MergeRe
   const data: AppData = {
     ...remote,
     ...local,
-    version: Math.max(remote.version, local.version, 11),
+    version: Math.max(remote.version, local.version, 12),
     profile: local.profile,
     foodLog: merge(remote.foodLog, local.foodLog, (item) => item.id, (item) => stableString({ ...item, id: undefined })),
     nutritionTargetHistory: merge(remote.nutritionTargetHistory, local.nutritionTargetHistory, (item) => item.date),
@@ -178,6 +190,19 @@ export function mergeAppData(remoteInput: AppData, localInput: AppData): MergeRe
     cardioLog: merge(remote.cardioLog, local.cardioLog, (item) => item.id, (item) => stableString({ ...item, id: undefined })),
     progressionPlans: merge(remote.progressionPlans, local.progressionPlans, (item) => item.exerciseId),
     exerciseRestPreferences: { ...remote.exerciseRestPreferences, ...local.exerciseRestPreferences },
+    activeGoal: local.activeGoal,
+    coachingSettings: local.coachingSettings,
+    activityLog: merge(remote.activityLog, local.activityLog, (item) => item.date),
+    plannedFoodEntries: merge(remote.plannedFoodEntries, local.plannedFoodEntries, (item) => item.id),
+    calorieReservations: merge(remote.calorieReservations, local.calorieReservations, (item) => item.id),
+    dayTemplates: merge(remote.dayTemplates, local.dayTemplates, (item) => item.id),
+    recoveryFeedback: merge(remote.recoveryFeedback, local.recoveryFeedback, (item) => item.id),
+    pausePeriods: merge(remote.pausePeriods, local.pausePeriods, (item) => item.id),
+    weeklyCheckIns: merge(remote.weeklyCheckIns, local.weeklyCheckIns, (item) => item.id),
+    coachRecommendations: merge(remote.coachRecommendations, local.coachRecommendations, (item) => item.id),
+    planChanges: merge(remote.planChanges, local.planChanges, (item) => item.id),
+    productEvents: merge(remote.productEvents, local.productEvents, (item) => item.id),
+    onboardingCompleted: local.onboardingCompleted || remote.onboardingCompleted,
   };
   return { data, duplicates, conflicts };
 }

@@ -103,6 +103,163 @@ export interface NutritionDayRecord {
   date: string;
   finishedAt?: string;
   untrackedTreatment?: 'excluded' | 'no_data';
+  completeness?: 'fully_logged' | 'partially_logged' | 'not_logged' | 'planned_incomplete';
+  confirmedAt?: string;
+}
+
+export type CoachingConfidence = 'high' | 'moderate' | 'low' | 'insufficient';
+export type CoachingConclusion = 'keep_plan' | 'improve_adherence' | 'improve_logging' | 'increase_activity' | 'reduce_calories' | 'increase_calories' | 'recovery_focus' | 'paused' | 'goal_reached';
+export type RecommendationStatus = 'pending' | 'applied' | 'kept_current' | 'rejected' | 'review_later';
+export type RecommendationFeedback = 'useful' | 'not_useful' | 'not_realistic' | 'incorrect_data' | 'too_strict' | 'too_easy';
+export type PlanVariable = 'calorie_target' | 'daily_steps' | 'training_volume' | 'training_schedule' | 'recovery_week';
+
+export interface ActiveGoal {
+  id: string;
+  name: string;
+  startingWeightKg: number | null;
+  targetWeightKg: number;
+  targetRangeKg: [number, number];
+  phase: 'fat_loss' | 'maintenance';
+  startDate: string;
+  status: 'active' | 'paused' | 'completed';
+  desiredLossRateMinPct: number;
+  desiredLossRateMaxPct: number;
+}
+
+export interface CoachingSettings {
+  version: 1;
+  dailyStepGoal: number;
+  reviewWeekday: number;
+  coachingStyle: 'direct' | 'balanced' | 'supportive';
+}
+
+export interface ActivityEntry {
+  date: string;
+  steps: number;
+  source: 'manual';
+}
+
+export interface PlannedFoodEntry {
+  id: string;
+  date: string;
+  meal: MealType;
+  foodId: string;
+  servingId: string;
+  quantity: number;
+  plannedTime?: string;
+  status: 'planned' | 'consumed' | 'skipped' | 'changed';
+  actualQuantity?: number;
+  consumedFoodLogId?: string;
+  templateId?: string;
+  createdAt: string;
+}
+
+export interface CalorieReservation {
+  id: string;
+  date: string;
+  title: string;
+  meal: MealType;
+  calories: number;
+  note?: string;
+  createdAt: string;
+}
+
+export interface SavedDayTemplate {
+  id: string;
+  name: string;
+  items: Array<Pick<PlannedFoodEntry, 'meal' | 'foodId' | 'servingId' | 'quantity' | 'plannedTime'>>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecoveryFeedback {
+  id: string;
+  date: string;
+  energy: 'low' | 'normal' | 'high';
+  sleep: 'poor' | 'okay' | 'good';
+  soreness: 'low' | 'moderate' | 'high';
+  hunger: 'low' | 'manageable' | 'high';
+  motivation: 'low' | 'normal' | 'high';
+  createdAt: string;
+}
+
+export interface PausePeriod {
+  id: string;
+  type: 'traveling' | 'sick' | 'recovery_week' | 'maintenance_break' | 'paused';
+  startDate: string;
+  endDate?: string;
+  note?: string;
+  createdAt: string;
+}
+
+export interface CoachingEvidence {
+  label: string;
+  value: string;
+  detail?: string;
+}
+
+export interface ProposedPlanChange {
+  variable: PlanVariable;
+  previousValue: number | string;
+  proposedValue: number | string;
+  expectedEffect: string;
+}
+
+export interface CoachRecommendation {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  createdAt: string;
+  conclusion: CoachingConclusion;
+  title: string;
+  explanation: string;
+  confidence: CoachingConfidence;
+  evidence: CoachingEvidence[];
+  primaryAction: string;
+  secondaryActions: string[];
+  proposedChange?: ProposedPlanChange;
+  alternativeChange?: ProposedPlanChange;
+  nextReviewDate: string;
+  status: RecommendationStatus;
+  responseAt?: string;
+  feedback?: RecommendationFeedback;
+}
+
+export interface PlanChange {
+  id: string;
+  recommendationId: string;
+  variable: PlanVariable;
+  previousValue: number | string;
+  newValue: number | string;
+  reason: string;
+  appliedAt: string;
+  reviewDate: string;
+  outcome?: string;
+}
+
+export interface WeeklyCheckIn {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  completedAt: string;
+  recovery?: Omit<RecoveryFeedback, 'id' | 'date' | 'createdAt'>;
+  recommendationId: string;
+}
+
+export interface ProductEvent {
+  id: string;
+  name: 'onboarding_completed' | 'first_food_logged' | 'first_workout_completed' | 'weekly_check_in_completed' | 'recommendation_applied' | 'recommendation_rejected' | 'saved_meal_used' | 'planned_day_created' | 'returned_after_gap';
+  occurredAt: string;
+}
+
+export interface ProgressPhoto {
+  id: string;
+  pose: 'front' | 'side' | 'back';
+  date: string;
+  bodyWeightKg: number | null;
+  note: string;
+  createdAt: string;
+  imageUrl: string;
 }
 
 export interface UserProfile {
@@ -452,4 +609,17 @@ export interface AppData {
   squatProgression: SquatProgressionState;
   progressionPlans: ProgressionPlan[];
   exerciseRestPreferences: Record<string, number>;
+  activeGoal: ActiveGoal;
+  coachingSettings: CoachingSettings;
+  activityLog: ActivityEntry[];
+  plannedFoodEntries: PlannedFoodEntry[];
+  calorieReservations: CalorieReservation[];
+  dayTemplates: SavedDayTemplate[];
+  recoveryFeedback: RecoveryFeedback[];
+  pausePeriods: PausePeriod[];
+  weeklyCheckIns: WeeklyCheckIn[];
+  coachRecommendations: CoachRecommendation[];
+  planChanges: PlanChange[];
+  productEvents: ProductEvent[];
+  onboardingCompleted: boolean;
 }

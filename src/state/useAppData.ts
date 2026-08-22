@@ -3,7 +3,7 @@ import { uid } from '../lib/id';
 import { buildProgramTemplate, smartRepTargets, warmupTargets } from '../lib/workout';
 import { withDetectedOutliers } from '../lib/bodyMeasurements';
 import { dayIdForDate, moveTrainingSession as movePlannerSession, recalculateTrainingWeek, restoreRecommendedWeek as restorePlannerWeek, selectTrainingSession as selectPlannerSession, workoutTemplate } from '../lib/adaptivePlanner';
-import { toDateKey } from '../lib/date';
+import { shiftDate, toDateKey } from '../lib/date';
 import { createWeightLossPlan } from '../lib/weightLossPlan';
 import { detectedTimezone, nutritionTargetFromProfile, upsertTargetSnapshot } from '../lib/nutritionEvaluation';
 import { createProject75Repository, RepositoryError, type RemoteSnapshot } from '../repository/project75Repository';
@@ -15,7 +15,8 @@ import { emptyMeasurementValues } from '../lib/appDataMigration';
 import { createInitialData } from '../data/initialData';
 import { createFoodSnapshot, foodCanBeLogged } from '../lib/nutrition';
 import { resolveFood } from '../lib/foodCatalog';
-import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementDraft, BodyMetricKey, CardioEntry, FoodItem, FoodLogEntry, HabitEntry, LoggedSet, MealType, NutritionDayRecord, NutritionEvaluationSettings, ProgressionPlan, ReadinessResponse, SessionTemplateId, SquatProgressionLevel, TrainingDayPlan, TrainingSelectionSource, TrainingTemplate, UserProfile, WorkoutDay, WorkoutSession } from '../types/models';
+import { decideWeeklyCoach } from '../lib/coachingEngine';
+import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementDraft, BodyMetricKey, CalorieReservation, CardioEntry, CoachRecommendation, CoachingSettings, FoodItem, FoodLogEntry, HabitEntry, LoggedSet, MealType, NutritionDayRecord, NutritionEvaluationSettings, PausePeriod, PlannedFoodEntry, ProgressionPlan, ReadinessResponse, RecommendationFeedback, RecommendationStatus, RecoveryFeedback, SavedDayTemplate, SessionTemplateId, SquatProgressionLevel, TrainingDayPlan, TrainingSelectionSource, TrainingTemplate, UserProfile, WeeklyCheckIn, WorkoutDay, WorkoutSession } from '../types/models';
 
 export { migrateAppData } from '../lib/appDataMigration';
 
@@ -32,6 +33,11 @@ export interface MigrationPreview {
 
 function loadData(): AppData {
   return repository?.loadLocal() ?? createInitialData();
+}
+
+function withProductEvent(data: AppData, name: AppData['productEvents'][number]['name']): AppData {
+  if (data.productEvents.some((event) => event.name === name)) return data;
+  return { ...data, productEvents: [...data.productEvents, { id: uid('event'), name, occurredAt: new Date().toISOString() }] };
 }
 
 export function useAppData() {
@@ -290,13 +296,14 @@ export function useAppData() {
       const target = nutritionTargetFromProfile(current.profile, entry.date, detectedTimezone());
       const hasApplicableTarget = current.nutritionTargetHistory.some((item) => item.date <= entry.date);
       const shouldCache = food.source?.provider !== 'local' && !current.foodLibrary.some((item) => item.id === food.id);
-      return {
+      const next = {
         ...current,
         foodLog: [...current.foodLog, { ...entry, snapshot, id: uid('food'), createdAt: new Date().toISOString() }],
         foodLibrary: shouldCache ? [...current.foodLibrary, { ...food, isCached: true }] : current.foodLibrary,
         recentFoodIds: [entry.foodId, ...current.recentFoodIds.filter((id) => id !== entry.foodId)].slice(0, 8),
         nutritionTargetHistory: hasApplicableTarget ? current.nutritionTargetHistory : upsertTargetSnapshot(current.nutritionTargetHistory, target),
       };
+      return withProductEvent(next, 'first_food_logged');
     });
   }, [update]);
 
@@ -364,14 +371,90 @@ export function useAppData() {
 
   const finishNutritionDay = useCallback((date: string) => update((current) => ({
     ...current,
-    nutritionDayRecords: [...current.nutritionDayRecords.filter((item) => item.date !== date), { ...current.nutritionDayRecords.find((item) => item.date === date), date, finishedAt: new Date().toISOString(), untrackedTreatment: undefined }],
+    nutritionDayRecords: [...current.nutritionDayRecords.filter((item) => item.date !== date), { ...current.nutritionDayRecords.find((item) => item.date === date), date, finishedAt: new Date().toISOString(), confirmedAt: new Date().toISOString(), completeness: 'fully_logged', untrackedTreatment: undefined }],
   })), [update]);
+
+  const setNutritionDayCompleteness = useCallback((date: string, completeness: NutritionDayRecord['completeness']) => update((current) => ({
+    ...current,
+    nutritionDayRecords: [...current.nutritionDayRecords.filter((item) => item.date !== date), {
+      ...current.nutritionDayRecords.find((item) => item.date === date), date, completeness,
+      confirmedAt: new Date().toISOString(),
+      finishedAt: completeness === 'fully_logged' ? new Date().toISOString() : undefined,
+      ...(completeness === 'fully_logged' ? { untrackedTreatment: undefined } : {}),
+    }],
+  })), [update]);
+
+  const planFood = useCallback((entry: Omit<PlannedFoodEntry, 'id' | 'status' | 'createdAt'>) => update((current) => {
+    if (!resolveFood(current, entry.foodId)) return current;
+    return withProductEvent({
+      ...current,
+      plannedFoodEntries: [...current.plannedFoodEntries, { ...entry, id: uid('planned_food'), status: 'planned', createdAt: new Date().toISOString() }],
+    }, 'planned_day_created');
+  }), [update]);
+
+  const updatePlannedFood = useCallback((id: string, changes: Partial<Pick<PlannedFoodEntry, 'meal' | 'servingId' | 'quantity' | 'plannedTime' | 'status' | 'actualQuantity'>>) => update((current) => ({
+    ...current,
+    plannedFoodEntries: current.plannedFoodEntries.map((item) => item.id === id ? { ...item, ...changes } : item),
+  })), [update]);
+
+  const consumePlannedFood = useCallback((id: string, actualQuantity?: number) => update((current) => {
+    const planned = current.plannedFoodEntries.find((item) => item.id === id);
+    if (!planned || planned.status === 'consumed') return current;
+    const food = resolveFood(current, planned.foodId);
+    const quantity = Math.max(.05, actualQuantity ?? planned.quantity);
+    const snapshot = food ? createFoodSnapshot(food, planned.servingId, quantity) : null;
+    if (!food || !snapshot) return current;
+    const foodLogId = uid('food');
+    const target = nutritionTargetFromProfile(current.profile, planned.date, detectedTimezone());
+    const hasApplicableTarget = current.nutritionTargetHistory.some((item) => item.date <= planned.date);
+    return withProductEvent({
+      ...current,
+      foodLog: [...current.foodLog, { id: foodLogId, foodId: planned.foodId, date: planned.date, meal: planned.meal, servingId: planned.servingId, quantity, snapshot, createdAt: new Date().toISOString() }],
+      plannedFoodEntries: current.plannedFoodEntries.map((item) => item.id === id ? { ...item, status: quantity === planned.quantity ? 'consumed' : 'changed', actualQuantity: quantity, consumedFoodLogId: foodLogId } : item),
+      recentFoodIds: [planned.foodId, ...current.recentFoodIds.filter((foodId) => foodId !== planned.foodId)].slice(0, 8),
+      nutritionTargetHistory: hasApplicableTarget ? current.nutritionTargetHistory : upsertTargetSnapshot(current.nutritionTargetHistory, target),
+    }, 'first_food_logged');
+  }), [update]);
+
+  const deletePlannedFood = useCallback((id: string) => update((current) => ({
+    ...current, plannedFoodEntries: current.plannedFoodEntries.filter((item) => item.id !== id),
+  })), [update]);
+
+  const copyPlannedDay = useCallback((sourceDate: string, targetDate: string) => update((current) => {
+    const copies = current.plannedFoodEntries.filter((item) => item.date === sourceDate && item.status !== 'skipped').map((item) => ({
+      ...item, id: uid('planned_food'), date: targetDate, status: 'planned' as const, actualQuantity: undefined, consumedFoodLogId: undefined, createdAt: new Date().toISOString(),
+    }));
+    const reservations = current.calorieReservations.filter((item) => item.date === sourceDate).map((item) => ({ ...item, id: uid('reservation'), date: targetDate, createdAt: new Date().toISOString() }));
+    if (!copies.length && !reservations.length) return current;
+    return withProductEvent({ ...current, plannedFoodEntries: [...current.plannedFoodEntries, ...copies], calorieReservations: [...current.calorieReservations, ...reservations] }, 'planned_day_created');
+  }), [update]);
+
+  const saveDayTemplate = useCallback((name: string, date: string) => update((current) => {
+    const items: SavedDayTemplate['items'] = current.plannedFoodEntries.filter((item) => item.date === date && item.status !== 'skipped').map(({ meal, foodId, servingId, quantity, plannedTime }) => ({ meal, foodId, servingId, quantity, plannedTime }));
+    if (!name.trim() || !items.length) return current;
+    const now = new Date().toISOString();
+    return { ...current, dayTemplates: [...current.dayTemplates, { id: uid('day_template'), name: name.trim().slice(0, 80), items, createdAt: now, updatedAt: now }] };
+  }), [update]);
+
+  const applyDayTemplate = useCallback((templateId: string, date: string) => update((current) => {
+    const template = current.dayTemplates.find((item) => item.id === templateId);
+    if (!template) return current;
+    const entries: PlannedFoodEntry[] = template.items.map((item) => ({ ...item, id: uid('planned_food'), date, status: 'planned', templateId, createdAt: new Date().toISOString() }));
+    return withProductEvent({ ...current, plannedFoodEntries: [...current.plannedFoodEntries, ...entries] }, 'planned_day_created');
+  }), [update]);
+
+  const reserveCalories = useCallback((entry: Omit<CalorieReservation, 'id' | 'createdAt'>) => update((current) => ({
+    ...current,
+    calorieReservations: [...current.calorieReservations, { ...entry, calories: Math.max(0, Math.round(entry.calories)), id: uid('reservation'), createdAt: new Date().toISOString() }],
+  })), [update]);
+
+  const deleteCalorieReservation = useCallback((id: string) => update((current) => ({ ...current, calorieReservations: current.calorieReservations.filter((item) => item.id !== id) })), [update]);
 
   const setNutritionDayTreatment = useCallback((date: string, treatment?: NutritionDayRecord['untrackedTreatment']) => update((current) => ({
     ...current,
     nutritionDayRecords: treatment
-      ? [...current.nutritionDayRecords.filter((item) => item.date !== date), { date, untrackedTreatment: treatment }]
-      : current.nutritionDayRecords.filter((item) => item.date !== date),
+      ? [...current.nutritionDayRecords.filter((item) => item.date !== date), { ...current.nutritionDayRecords.find((item) => item.date === date), date, untrackedTreatment: treatment }]
+      : current.nutritionDayRecords.map((item) => item.date === date ? { ...item, untrackedTreatment: undefined } : item),
   })), [update]);
 
   const updateNutritionSettings = useCallback((settings: NutritionEvaluationSettings) => update((current) => ({ ...current, nutritionSettings: settings })), [update]);
@@ -441,6 +524,116 @@ export function useAppData() {
         : current.nutritionTargetHistory,
     };
   }), [update]);
+
+  const logSteps = useCallback((date: string, steps: number) => update((current) => ({
+    ...current,
+    activityLog: [...current.activityLog.filter((item) => item.date !== date), { date, steps: Math.max(0, Math.round(steps)), source: 'manual' }],
+  })), [update]);
+
+  const saveRecoveryFeedback = useCallback((feedback: Omit<RecoveryFeedback, 'id' | 'createdAt'>) => update((current) => ({
+    ...current,
+    recoveryFeedback: [...current.recoveryFeedback.filter((item) => item.date !== feedback.date), { ...feedback, id: uid('recovery'), createdAt: new Date().toISOString() }],
+  })), [update]);
+
+  const startPause = useCallback((pause: Omit<PausePeriod, 'id' | 'createdAt'>) => update((current) => ({
+    ...current,
+    activeGoal: { ...current.activeGoal, status: 'paused' },
+    pausePeriods: [...current.pausePeriods.map((item) => !item.endDate ? { ...item, endDate: shiftDate(pause.startDate, -1) } : item), { ...pause, id: uid('pause'), createdAt: new Date().toISOString() }],
+  })), [update]);
+
+  const resumePlan = useCallback((date = toDateKey()) => update((current) => ({
+    ...current,
+    activeGoal: { ...current.activeGoal, status: 'active' },
+    pausePeriods: current.pausePeriods.map((item) => !item.endDate ? { ...item, endDate: date } : item),
+  })), [update]);
+
+  const startMaintenancePhase = useCallback(() => update((current) => ({
+    ...current,
+    activeGoal: { ...current.activeGoal, phase: 'maintenance', status: 'completed' },
+  })), [update]);
+
+  const completeWeeklyCheckIn = useCallback((date: string, recovery?: Omit<RecoveryFeedback, 'id' | 'date' | 'createdAt'>) => {
+    let recommendationId = '';
+    update((current) => {
+      const recoveryFeedback = recovery ? { ...recovery, id: uid('recovery'), date, createdAt: new Date().toISOString() } : null;
+      const withRecovery: AppData = recoveryFeedback ? {
+        ...current,
+        recoveryFeedback: [...current.recoveryFeedback.filter((item) => item.date !== date), recoveryFeedback],
+      } : current;
+      const decision = decideWeeklyCoach(withRecovery, date);
+      const existingCheckIn = withRecovery.weeklyCheckIns.find((item) => item.periodEnd === date);
+      const existingRecommendation = existingCheckIn ? withRecovery.coachRecommendations.find((item) => item.id === existingCheckIn.recommendationId) : null;
+      recommendationId = existingRecommendation?.id ?? uid('recommendation');
+      const recommendation: CoachRecommendation = {
+        id: recommendationId,
+        periodStart: decision.evidence.length ? shiftDate(date, -6) : date,
+        periodEnd: date,
+        createdAt: existingRecommendation?.createdAt ?? new Date().toISOString(),
+        conclusion: decision.conclusion,
+        title: decision.title,
+        explanation: decision.explanation,
+        confidence: decision.confidence,
+        evidence: decision.evidence,
+        primaryAction: decision.primaryAction,
+        secondaryActions: decision.secondaryActions,
+        proposedChange: decision.proposedChange,
+        alternativeChange: decision.alternativeChange,
+        nextReviewDate: decision.nextReviewDate,
+        status: existingRecommendation?.status ?? 'pending',
+        responseAt: existingRecommendation?.responseAt,
+        feedback: existingRecommendation?.feedback,
+      };
+      const checkIn: WeeklyCheckIn = {
+        id: existingCheckIn?.id ?? uid('check_in'), periodStart: shiftDate(date, -6), periodEnd: date,
+        completedAt: new Date().toISOString(), recovery, recommendationId,
+      };
+      return withProductEvent({
+        ...withRecovery,
+        coachRecommendations: [...withRecovery.coachRecommendations.filter((item) => item.id !== recommendationId), recommendation],
+        weeklyCheckIns: [...withRecovery.weeklyCheckIns.filter((item) => item.periodEnd !== date), checkIn],
+      }, 'weekly_check_in_completed');
+    });
+    return recommendationId;
+  }, [update]);
+
+  const respondRecommendation = useCallback((recommendationId: string, status: RecommendationStatus, choice: 'primary' | 'alternative' = 'primary') => update((current) => {
+    const recommendation = current.coachRecommendations.find((item) => item.id === recommendationId);
+    if (!recommendation) return current;
+    const responseAt = new Date().toISOString();
+    let next: AppData = {
+      ...current,
+      coachRecommendations: current.coachRecommendations.map((item) => item.id === recommendationId ? { ...item, status, responseAt } : item),
+    };
+    if (status !== 'applied') return status === 'rejected' || status === 'kept_current'
+      ? withProductEvent(next, 'recommendation_rejected')
+      : next;
+    const change = choice === 'alternative' ? recommendation.alternativeChange : recommendation.proposedChange;
+    if (!change) return next;
+    if (change.variable === 'calorie_target' && typeof change.proposedValue === 'number') {
+      const profile = { ...next.profile, calorieTarget: change.proposedValue };
+      next = { ...next, profile, nutritionTargetHistory: upsertTargetSnapshot(next.nutritionTargetHistory, nutritionTargetFromProfile(profile, toDateKey(), detectedTimezone())) };
+    } else if (change.variable === 'daily_steps' && typeof change.proposedValue === 'number') {
+      next = { ...next, coachingSettings: { ...next.coachingSettings, dailyStepGoal: change.proposedValue } };
+    }
+    next = {
+      ...next,
+      planChanges: [...next.planChanges, {
+        id: uid('plan_change'), recommendationId, variable: change.variable, previousValue: change.previousValue,
+        newValue: change.proposedValue, reason: recommendation.explanation, appliedAt: responseAt, reviewDate: recommendation.nextReviewDate,
+      }],
+    };
+    return withProductEvent(next, 'recommendation_applied');
+  }), [update]);
+
+  const setRecommendationFeedback = useCallback((recommendationId: string, feedback: RecommendationFeedback) => update((current) => ({
+    ...current,
+    coachRecommendations: current.coachRecommendations.map((item) => item.id === recommendationId ? { ...item, feedback } : item),
+  })), [update]);
+
+  const completeOnboarding = useCallback((profile: UserProfile, coachingSettings: CoachingSettings, startingWeightKg?: number) => update((current) => withProductEvent({
+    ...current, profile, coachingSettings, onboardingCompleted: true,
+    activeGoal: { ...current.activeGoal, startingWeightKg: startingWeightKg ?? current.activeGoal.startingWeightKg ?? null, targetWeightKg: profile.goalWeightKg, targetRangeKg: [profile.goalWeightKg - .5, profile.goalWeightKg + .5] },
+  }, 'onboarding_completed')), [update]);
 
   const updateProgramDay = useCallback((day: WorkoutDay) => update((current) => {
     const next = { ...current, program: current.program.map((item) => item.id === day.id ? day : item) };
@@ -517,11 +710,13 @@ export function useAppData() {
     progressionPlans: [...current.progressionPlans.filter((item) => item.exerciseId !== exerciseId), { exerciseId, targetWeightKg, reason, confirmedAt: new Date().toISOString() }],
   })), [update]);
 
-  const startWorkout = useCallback((day: WorkoutDay, date = toDateKey()) => {
+  const startWorkout = useCallback((day: WorkoutDay, date = toDateKey(), mode: 'full' | 'short' = 'full') => {
     if (day.isRestDay || day.exercises.length === 0) return null;
     const lightVersion = data.trainingPlanner.dailyPlans.find((plan) => plan.date === date)?.readinessResponse?.preferredIntensity === 'light';
+    const volumeReduction = data.planChanges.some((change) => change.variable === 'training_volume' && change.appliedAt.slice(0, 10) <= date && change.reviewDate >= date);
+    const selectedExercises = mode === 'short' ? day.exercises.slice(0, 4) : day.exercises;
     const previousCompleted = data.sessions.filter((session) => session.completedAt).flatMap((session) => session.sets).filter((set) => set.completed && !set.isWarmup);
-    const sets: LoggedSet[] = day.exercises.flatMap((exercise) => {
+    const sets: LoggedSet[] = selectedExercises.flatMap((exercise, exerciseIndex) => {
       const previous = previousCompleted.filter((set) => set.exerciseId === exercise.exerciseId).slice(-exercise.sets);
       const confirmedLoad = data.progressionPlans.find((item) => item.exerciseId === exercise.exerciseId)?.targetWeightKg;
       const workingLoad = confirmedLoad ?? previous.at(-1)?.weightKg ?? 0;
@@ -533,7 +728,7 @@ export function useAppData() {
         weightKg: warmupPlan[index]?.weightKg ?? 0,
         reps: warmupPlan[index]?.reps ?? 5, completed: false, isWarmup: true,
       }));
-      const workingCount = lightVersion ? Math.max(1, exercise.sets - 1) : exercise.sets;
+      const workingCount = lightVersion || mode === 'short' || volumeReduction && exerciseIndex < 2 ? Math.max(1, exercise.sets - 1) : exercise.sets;
       const repTargets = confirmedLoad && confirmedLoad > (previous.at(-1)?.weightKg ?? 0)
         ? Array.from({ length: workingCount }, () => exercise.repMin)
         : smartRepTargets(previous, exercise, workingCount);
@@ -545,16 +740,23 @@ export function useAppData() {
       return [...warmups, ...working];
     });
     if (!day.workoutId) return null;
-    const session: WorkoutSession = { id: uid('session'), date, dayId: dayIdForDate(date), workoutId: day.workoutId, title: lightVersion ? `${day.title} · Light` : day.title, startedAt: new Date().toISOString(), durationSeconds: 0, sets };
-    const plannedExercises = new Set(day.exercises.map((exercise) => exercise.exerciseId));
+    const suffix = mode === 'short' ? ' · Short' : lightVersion ? ' · Light' : '';
+    const session: WorkoutSession = { id: uid('session'), date, dayId: dayIdForDate(date), workoutId: day.workoutId, title: `${day.title}${suffix}`, startedAt: new Date().toISOString(), durationSeconds: 0, sets };
+    const plannedExercises = new Set(selectedExercises.map((exercise) => exercise.exerciseId));
     update((current) => ({ ...current, sessions: [...current.sessions, session], progressionPlans: current.progressionPlans.filter((item) => !plannedExercises.has(item.exerciseId)) }));
     return session.id;
-  }, [data.progressionPlans, data.sessions, data.trainingPlanner.dailyPlans, update]);
+  }, [data.planChanges, data.progressionPlans, data.sessions, data.trainingPlanner.dailyPlans, update]);
 
   const startWorkoutTemplate = useCallback((templateId: SessionTemplateId, date = toDateKey()) => {
     const template = workoutTemplate(data.program, templateId);
     if (!template) return null;
     return startWorkout(template, date);
+  }, [data.program, startWorkout]);
+
+  const startShortWorkoutTemplate = useCallback((templateId: SessionTemplateId, date = toDateKey()) => {
+    const template = workoutTemplate(data.program, templateId);
+    if (!template) return null;
+    return startWorkout(template, date, 'short');
   }, [data.program, startWorkout]);
 
   const discardWorkout = useCallback((sessionId: string) => update((current) => ({ ...current, sessions: current.sessions.filter((session) => session.id !== sessionId) })), [update]);
@@ -598,7 +800,8 @@ export function useAppData() {
     const completedAt = new Date().toISOString();
     const session = current.sessions.find((item) => item.id === sessionId);
     const next = { ...current, sessions: current.sessions.map((item) => item.id === sessionId ? { ...item, completedAt, durationSeconds } : item) };
-    return session ? { ...next, trainingPlanner: recalculateTrainingWeek(next, session.date) } : next;
+    const planned = session ? { ...next, trainingPlanner: recalculateTrainingWeek(next, session.date) } : next;
+    return withProductEvent(planned, 'first_workout_completed');
   }), [update]);
 
   const updateHabit = useCallback((date: string, changes: Partial<Omit<HabitEntry, 'date'>>) => update((current) => {
@@ -611,11 +814,13 @@ export function useAppData() {
 
   return useMemo(() => ({
     data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveMealFromDiary, deleteSavedMeal, saveFoodToLibrary, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings,
+    setNutritionDayCompleteness, planFood, updatePlannedFood, consumePlannedFood, deletePlannedFood, copyPlannedDay, saveDayTemplate, applyDayTemplate, reserveCalories, deleteCalorieReservation,
     saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
-    startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, updateWorkoutLoad, setExerciseEffort, updateExerciseNote, setExerciseRestPreference, finishWorkout, updateHabit, totalsForDate,
+    logSteps, saveRecoveryFeedback, startPause, resumePlan, startMaintenancePhase, completeWeeklyCheckIn, respondRecommendation, setRecommendationFeedback, completeOnboarding,
+    startWorkout, startWorkoutTemplate, startShortWorkoutTemplate, discardWorkout, updateWorkoutSet, updateWorkoutLoad, setExerciseEffort, updateExerciseNote, setExerciseRestPreference, finishWorkout, updateHabit, totalsForDate,
     syncStatus, syncMessage, lastSuccessfulSync, account, migrationPreview, migrationBackupAvailable,
     migrateLocalData, keepLocalOnly, retrySync, exportBackup, previewBackup, importBackup, removeLocalMigrationBackup,
-  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveMealFromDiary, deleteSavedMeal, saveFoodToLibrary, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings, saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, updateWorkoutLoad, setExerciseEffort, updateExerciseNote, setExerciseRestPreference, finishWorkout, updateHabit, totalsForDate, syncStatus, syncMessage, lastSuccessfulSync, account, migrationPreview, migrationBackupAvailable, migrateLocalData, keepLocalOnly, retrySync, exportBackup, previewBackup, importBackup, removeLocalMigrationBackup]);
+  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveMealFromDiary, deleteSavedMeal, saveFoodToLibrary, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings, setNutritionDayCompleteness, planFood, updatePlannedFood, consumePlannedFood, deletePlannedFood, copyPlannedDay, saveDayTemplate, applyDayTemplate, reserveCalories, deleteCalorieReservation, saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, logSteps, saveRecoveryFeedback, startPause, resumePlan, startMaintenancePhase, completeWeeklyCheckIn, respondRecommendation, setRecommendationFeedback, completeOnboarding, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, startWorkoutTemplate, startShortWorkoutTemplate, discardWorkout, updateWorkoutSet, updateWorkoutLoad, setExerciseEffort, updateExerciseNote, setExerciseRestPreference, finishWorkout, updateHabit, totalsForDate, syncStatus, syncMessage, lastSuccessfulSync, account, migrationPreview, migrationBackupAvailable, migrateLocalData, keepLocalOnly, retrySync, exportBackup, previewBackup, importBackup, removeLocalMigrationBackup]);
 }
 
 export type AppController = ReturnType<typeof useAppData>;

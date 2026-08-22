@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Apple, ChartNoAxesCombined, Dumbbell, House, Settings2, Sparkles } from 'lucide-react';
 
-export type Page = 'home' | 'food' | 'workout' | 'progress' | 'profile';
+export type Page = 'home' | 'coach' | 'food' | 'workout' | 'progress' | 'profile';
 
 interface AppShellProps {
   page: Page;
@@ -14,6 +14,7 @@ interface AppShellProps {
 
 const navItems = [
   { id: 'home' as const, label: 'Home', Icon: House },
+  { id: 'coach' as const, label: 'Coach', Icon: Sparkles },
   { id: 'food' as const, label: 'Nutrition', Icon: Apple },
   { id: 'workout' as const, label: 'Workout', Icon: Dumbbell },
   { id: 'progress' as const, label: 'Progress', Icon: ChartNoAxesCombined },

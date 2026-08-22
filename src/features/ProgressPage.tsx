@@ -4,12 +4,14 @@ import { Activity, Award, BedDouble, Check, Droplets, Dumbbell, Footprints, Meda
 import { ToneIcon } from '../components/Visuals';
 import { FitDaysImport } from './FitDaysImport';
 import { BodyCompositionDashboard } from './BodyCompositionDashboard';
+import { ProgressPhotos } from './ProgressPhotos';
 import { exerciseMap } from '../data/exercises';
 import { datesInWeek, weeklyVolumeSeries } from '../lib/engagement';
 import { prettyDate, shiftDate, toDateKey } from '../lib/date';
 import { average } from '../lib/progress';
 import type { AppController } from '../state/useAppData';
 import { getDashboardSummary } from '../lib/selectors';
+import { buildCoachingInputs, decideWeeklyCoach, getStrengthTrends } from '../lib/coachingEngine';
 
 interface ProgressPageProps { controller: AppController; }
 type ProgressTab = 'overview' | 'body' | 'training' | 'nutrition';
@@ -48,6 +50,12 @@ export function ProgressPage({ controller }: ProgressPageProps) {
   const consistency = dashboard.weekly;
   const records = dashboard.personalRecords;
   const volumeSeries = weeklyVolumeSeries(data.sessions, today, 6);
+  const coachDecision = decideWeeklyCoach(data, today);
+  const coachingInputs = buildCoachingInputs(data, today);
+  const strengthTrends = getStrengthTrends(data).filter((item) => item.comparableSessions >= 2).slice(0, 6);
+  const waistHistory = data.measurements.filter((item) => !item.isDemo && item.waistCircumferenceCm != null).sort((a, b) => (a.measuredAt ?? '').localeCompare(b.measuredAt ?? ''));
+  const latestWaist = waistHistory.at(-1)?.waistCircumferenceCm ?? null;
+  const waistChange = latestWaist != null && waistHistory[0]?.waistCircumferenceCm != null ? latestWaist - waistHistory[0].waistCircumferenceCm! : null;
 
   const cardioSeries = volumeSeries.map((item) => {
     const start = item.startDate;
@@ -70,16 +78,6 @@ export function ProgressPage({ controller }: ProgressPageProps) {
     return { date, workout, nutrition, cardio, score: Number(workout) + Number(nutrition) + Number(cardio) };
   });
 
-  const weeklyCoach = weightMeasurementCount < 2 || !previousAvgWeight
-    ? 'Add at least two weight measurements to compare weekly averages. Continue logging meals and workouts in the meantime.'
-    : weightChange <= -.2 && weightChange >= -.75 && completedWorkouts >= 2 && averageProtein >= data.profile.proteinTarget * .85
-    ? `Your average weight decreased ${Math.abs(weightChange).toFixed(2)} kg, you completed ${completedWorkouts} workouts, and protein averaged ${Math.round(averageProtein)} g/day. Keep the current calorie target.`
-    : weightChange > -.1 && loggedTotals.length > 0 && averageCalories <= data.profile.calorieTarget + 100
-      ? 'Weight is nearly flat while logged calories average near target. Keep the plan for one more week before considering a small adjustment.'
-      : weightChange < -.8
-        ? 'Weight is falling quickly. Protect training quality and protein; a faster rate is not automatically better.'
-        : `Keep calories near ${data.profile.calorieTarget} and make protein plus the planned strength sessions the priority.`;
-
   const exerciseHistory = data.sessions.filter((session) => session.completedAt).flatMap((session) => {
     const sets = session.sets.filter((set) => set.completed && !set.isWarmup && set.exerciseId === exerciseId);
     if (!sets.length) return [];
@@ -101,7 +99,7 @@ export function ProgressPage({ controller }: ProgressPageProps) {
 
     <nav className="progress-tabs" aria-label="Progress sections">{(['body', 'overview', 'training', 'nutrition'] as const).map((tab) => <button type="button" key={tab} aria-selected={progressTab === tab} className={progressTab === tab ? 'active' : ''} onClick={() => setProgressTab(tab)}>{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>)}</nav>
 
-    {progressTab === 'body' ? <><FitDaysImport controller={controller} /><BodyCompositionDashboard controller={controller} /></> : null}
+    {progressTab === 'body' ? <><FitDaysImport controller={controller} /><BodyCompositionDashboard controller={controller} /><ProgressPhotos /></> : null}
 
     <section className="progress-hero card" hidden={progressTab !== 'overview'}>
       <div className="goal-orbit" style={{ '--goal-progress': `${weightProgress * 3.6}deg` } as CSSProperties}><div><strong>{Math.round(weightProgress)}%</strong><span>to goal</span></div></div>
@@ -114,6 +112,11 @@ export function ProgressPage({ controller }: ProgressPageProps) {
       <article className="metric-card"><ToneIcon Icon={TrendingDown} tone="lime" /><p>Weekly change</p><strong>{weightMeasurementCount >= 2 && previousAvgWeight ? `${weightChange > 0 ? '+' : ''}${weightChange.toFixed(2)}` : '—'} <small>kg</small></strong><span>{weightMeasurementCount >= 2 && previousAvgWeight ? 'Compared with previous week' : 'Not enough data'}</span></article>
       <article className="metric-card"><ToneIcon Icon={Target} tone="amber" /><p>Strength sessions</p><strong>{completedWorkouts}<small> / {plannedWorkouts}</small></strong><span>This week</span></article>
       <article className="metric-card"><ToneIcon Icon={Award} tone="violet" /><p>Personal records</p><strong>{records.length}</strong><span>Completed set records</span></article>
+    </section>
+
+    <section className="cut-proof-grid" hidden={progressTab !== 'overview'}>
+      <article className="card cut-proof-summary"><div><p className="eyebrow">Fat-loss proof</p><h2>Is the cut working without sacrificing strength?</h2></div><div className="cut-proof-signals"><span><small>Weight pace</small><strong>{coachingInputs.weightPace.replaceAll('_', ' ')}</strong></span><span><small>Waist trend</small><strong>{waistChange == null ? 'Needs data' : `${waistChange > 0 ? '+' : ''}${waistChange.toFixed(1)} cm`}</strong></span><span><small>Strength trend</small><strong>{coachingInputs.overallStrength.replaceAll('_', ' ')}</strong></span><span><small>Workout adherence</small><strong>{coachingInputs.workoutAdherencePct == null ? 'Needs data' : `${Math.round(coachingInputs.workoutAdherencePct)}%`}</strong></span></div><p className="cut-proof-note">Weight and waist show whether tissue is trending down; repeated comparable working sets show whether performance is being retained. A single bad session never decides the trend.</p></article>
+      <article className="card strength-retention"><div className="section-title"><div><h2>Strength retention</h2></div><ToneIcon Icon={Dumbbell} tone="coral" /></div>{strengthTrends.length ? <div>{strengthTrends.map((item) => <span key={item.exerciseId}><strong>{item.exerciseName}</strong><small>{item.comparableSessions} comparable sessions</small><b className={item.state.includes('declining') ? 'declining' : ''}>{item.changePct == null ? '—' : `${item.changePct > 0 ? '+' : ''}${item.changePct.toFixed(1)}%`}</b></span>)}</div> : <div className="empty-state compact"><Dumbbell size={25} /><h3>Build a comparable trend</h3><p>Complete the same loaded exercises in at least two sessions.</p></div>}</article>
     </section>
 
     <section className="progress-layout premium-progress-layout" hidden={progressTab !== 'overview'}>
@@ -138,6 +141,6 @@ export function ProgressPage({ controller }: ProgressPageProps) {
       <article className="card habits-card" hidden={progressTab !== 'overview'}><div className="section-title"><div><h2>Daily habits</h2></div><span>{Object.values(habit).filter((value) => value === true).length} / 3</span></div>{[{ key: 'water' as const, label: 'Water target', detail: 'Hydration supports performance', Icon: Droplets }, { key: 'walk' as const, label: 'Daily walk', detail: 'Low-fatigue activity', Icon: Footprints }, { key: 'sleep' as const, label: 'Sufficient sleep', detail: 'Recovery and appetite control', Icon: BedDouble }].map(({ key, label, detail, Icon }) => <button type="button" key={key} className={habit[key] ? 'done' : ''} onClick={() => updateHabit(today, { [key]: !habit[key] })}><span><Icon size={19} /></span><p><strong>{label}</strong><small>{detail}</small></p><i>{habit[key] ? <Check size={16} /> : null}</i></button>)}</article>
     </section>
 
-    <article className="card weekly-review premium-review" hidden={progressTab !== 'overview'}><div className="section-title"><div><h2>Weekly summary</h2></div><span>Current week</span></div><div className="review-table"><div><span>Weight average</span><strong>{trend.currentAverage ? `${trend.currentAverage.toFixed(1)} kg` : '—'}</strong><small>{previousAvgWeight ? `vs ${previousAvgWeight.toFixed(1)} kg` : 'Not enough data'}</small></div><div><span>Average calories</span><strong>{loggedTotals.length ? `${Math.round(averageCalories).toLocaleString()} kcal` : '—'}</strong><small>{loggedTotals.length ? `Average across ${loggedTotals.length} logged days · ${withinTarget} near target` : 'No meals logged this week'}</small></div><div><span>Average protein</span><strong>{loggedTotals.length ? `${Math.round(averageProtein)} g` : '—'}</strong><small>{loggedTotals.length ? `Average across ${loggedTotals.length} logged days · ${proteinDays} on target` : 'No meals logged this week'}</small></div><div><span>Training</span><strong>{completedWorkouts} / {plannedWorkouts}</strong><small>planned sessions</small></div></div><div className="weekly-coach"><Sparkles size={21} /><p><strong>Summary</strong>{weeklyCoach}</p></div></article>
+    <article className="card weekly-review premium-review" hidden={progressTab !== 'overview'}><div className="section-title"><div><h2>Weekly summary</h2></div><span>{coachDecision.confidence} confidence</span></div><div className="review-table"><div><span>Weight average</span><strong>{trend.currentAverage ? `${trend.currentAverage.toFixed(1)} kg` : '—'}</strong><small>{previousAvgWeight ? `vs ${previousAvgWeight.toFixed(1)} kg` : 'Not enough data'}</small></div><div><span>Average calories</span><strong>{loggedTotals.length ? `${Math.round(averageCalories).toLocaleString()} kcal` : '—'}</strong><small>{loggedTotals.length ? `Average across ${loggedTotals.length} logged days · ${withinTarget} near target` : 'No fully logged meals this week'}</small></div><div><span>Average protein</span><strong>{loggedTotals.length ? `${Math.round(averageProtein)} g` : '—'}</strong><small>{loggedTotals.length ? `Average across ${loggedTotals.length} logged days · ${proteinDays} on target` : 'No fully logged meals this week'}</small></div><div><span>Training</span><strong>{completedWorkouts} / {plannedWorkouts}</strong><small>planned sessions</small></div></div><div className="weekly-coach"><Sparkles size={21} /><p><strong>{coachDecision.title}</strong>{coachDecision.explanation}</p></div></article>
   </div>;
 }

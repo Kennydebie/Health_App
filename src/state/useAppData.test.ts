@@ -25,7 +25,7 @@ describe('app data migration', () => {
 
     const migrated = migrateAppData(saved);
 
-    expect(migrated.version).toBe(11);
+    expect(migrated.version).toBe(12);
     expect(migrated.program).toHaveLength(7);
     expect(migrated.program.filter((day) => !day.isRestDay).map((day) => day.title)).toEqual(['Upper A', 'Lower A', 'Upper B', 'Lower B']);
     expect(migrated.profile).toMatchObject({ balanceLevel: 'beginner', trainingTemplate: 'four-day-upper-lower' });

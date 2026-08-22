@@ -78,7 +78,7 @@ export function createSeedData(): AppData {
       balanceLevel: 'beginner', trainingTemplate: 'four-day-upper-lower',
   };
   return {
-    version: 9,
+    version: 12,
     profile,
     foodLog: structuredClone(foodLog),
     nutritionTargetHistory: [nutritionTargetFromProfile(profile, shiftDate(today, -1), detectedTimezone())],
@@ -105,5 +105,22 @@ export function createSeedData(): AppData {
     squatProgression: { currentLevel: 'assisted-squat', stableSessions: 0, updatedAt: now },
     progressionPlans: [],
     exerciseRestPreferences: {},
+    activeGoal: {
+      id: 'active-goal', name: 'Project 75', startingWeightKg: weightValues[0], targetWeightKg: 75,
+      targetRangeKg: [74.5, 75.5], phase: 'fat_loss', startDate: shiftDate(today, -13), status: 'active',
+      desiredLossRateMinPct: .3, desiredLossRateMaxPct: .8,
+    },
+    coachingSettings: { version: 1, dailyStepGoal: 8000, reviewWeekday: 0, coachingStyle: 'balanced' },
+    activityLog: [],
+    plannedFoodEntries: [],
+    calorieReservations: [],
+    dayTemplates: [],
+    recoveryFeedback: [],
+    pausePeriods: [],
+    weeklyCheckIns: [],
+    coachRecommendations: [],
+    planChanges: [],
+    productEvents: [],
+    onboardingCompleted: true,
   };
 }
