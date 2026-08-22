@@ -2,8 +2,8 @@ import { useMemo, useState, type ComponentType } from 'react';
 import { AlertTriangle, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Copy, Minus, Pencil, Plus, Settings2, Target } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Modal } from '../components/Modal';
-import { foodMap } from '../data/foods';
 import { addMacros, entryMacros } from '../lib/nutrition';
+import { foodForEntry } from '../lib/foodCatalog';
 import {
   calendarMonthDates,
   calendarWeekDates,
@@ -36,14 +36,13 @@ function useNutritionEvaluator(controller: AppController) {
   const totalsByDate = useMemo(() => {
     const byDate = new Map<string, Macros[]>();
     for (const entry of data.foodLog) {
-      const food = foodMap.get(entry.foodId);
-      if (!food) continue;
+      const food = foodForEntry(data, entry);
       const current = byDate.get(entry.date) ?? [];
       current.push(entryMacros(food, entry));
       byDate.set(entry.date, current);
     }
     return new Map([...byDate].map(([date, values]) => [date, addMacros(values)]));
-  }, [data.foodLog]);
+  }, [data]);
   const recordByDate = useMemo(() => new Map(data.nutritionDayRecords.map((item) => [item.date, item])), [data.nutritionDayRecords]);
   const today = toDateKey();
   return (date: string) => evaluateNutritionDay({
@@ -148,7 +147,7 @@ function DayDetail({ evaluation, entries, onClose, onDiary, onAdd, onEdit, contr
     <div className="nutrition-day-detail">
       <NutritionGoalBars evaluation={evaluation} compact/>
       <section className="nutrition-explanation"><h3>{statusLabel(evaluation.overall, true)}</h3>{explanationForDay(evaluation).map((line) => <p key={line}>{line}</p>)}</section>
-      <section className="nutrition-meals-detail"><header><h3>Foods logged</h3><span>{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</span></header>{entries.length ? Object.entries(mealGroups).map(([meal, items]) => <div key={meal}><strong>{meal.charAt(0).toUpperCase() + meal.slice(1)}</strong>{items.map((entry) => { const food = foodMap.get(entry.foodId); return food ? <button type="button" key={entry.id} onClick={() => onEdit(entry)}><span>{food.name}</span><small>{Math.round(entryMacros(food, entry).calories)} kcal</small><Pencil size={14}/></button> : null; })}</div>) : <p>No food was logged for this date.</p>}</section>
+      <section className="nutrition-meals-detail"><header><h3>Foods logged</h3><span>{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</span></header>{entries.length ? Object.entries(mealGroups).map(([meal, items]) => <div key={meal}><strong>{meal.charAt(0).toUpperCase() + meal.slice(1)}</strong>{items.map((entry) => { const food = foodForEntry(controller.data, entry); return <button type="button" key={entry.id} onClick={() => onEdit(entry)}><span>{food?.name ?? entry.snapshot?.foodName ?? 'Saved food'}</span><small>{Math.round(entryMacros(food, entry).calories)} kcal</small><Pencil size={14}/></button>; })}</div>) : <p>No food was logged for this date.</p>}</section>
       <section className="copy-day-controls"><div><h3>Copy meals to another day</h3><p>Copies every logged entry without changing this day.</p></div><input type="date" value={copyDate} onChange={(event) => setCopyDate(event.target.value)}/><button type="button" className="secondary-button" disabled={!entries.length || copyDate === evaluation.date} onClick={() => controller.copyNutritionDay(evaluation.date, copyDate)}><Copy size={16}/> Copy meals</button></section>
       <section className="day-tracking-controls"><div><h3>Adherence handling</h3><p>Use this only for a day you intentionally did not track.</p></div><button type="button" className={evaluation.record?.untrackedTreatment === 'excluded' ? 'active' : ''} onClick={() => controller.setNutritionDayTreatment(evaluation.date, 'excluded')}>Exclude day</button><button type="button" className={evaluation.record?.untrackedTreatment === 'no_data' ? 'active' : ''} onClick={() => controller.setNutritionDayTreatment(evaluation.date, 'no_data')}>Count as no data</button>{evaluation.record?.untrackedTreatment ? <button type="button" onClick={() => controller.setNutritionDayTreatment(evaluation.date)}>Track normally</button> : null}</section>
       {evaluation.date === toDateKey() && !evaluation.complete && evaluation.hasData ? <button type="button" className="finish-today-button" onClick={() => controller.finishNutritionDay(evaluation.date)}><Check size={17}/> Finish today</button> : null}

@@ -1,6 +1,6 @@
 import { defaultProgram, exerciseMap } from '../data/exercises';
 import { shiftDate, toDateKey } from './date';
-import type { CardioEntry, MovementPattern, ProgramExercise, SquatProgressionLevel, TrainingTemplate, UserProfile, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
+import type { CardioEntry, ExercisePrescription, LoggedSet, MovementPattern, ProgramExercise, SquatProgressionLevel, TrainingTemplate, UserProfile, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 export const squatProgressionLevels: Array<{ id: SquatProgressionLevel; label: string; requirement: 'supported' | 'basic' | 'advanced' }> = [
   { id: 'assisted-squat', label: 'Assisted squat', requirement: 'supported' },
@@ -177,7 +177,7 @@ export function progressionRecommendation(sessions: WorkoutSession[], exerciseId
   if (!performances.length) return null;
   const current = performances.at(-1)!;
   const allAtTop = current.every((set) => set.reps >= prescription.repMax);
-  if (allAtTop && current.some((set) => set.rir === undefined)) return { type: 'log-rir', title: 'Log effort before progressing', text: 'Every working set reached the top of the range. Add RIR for each set so the app can verify that the target effort was maintained.' };
+  if (allAtTop && current.every((set) => set.rir === undefined)) return { type: 'log-rir', title: 'Rate the exercise before progressing', text: 'Every working set reached the top of the range. Add one optional effort rating so the app can verify that the target effort was maintained.' };
   const minRir = Number.parseInt(prescription.rir, 10) || 1;
   const qualifies = (sets: typeof current) => sets.every((set) => set.reps >= prescription.repMax && (set.rir ?? -1) >= minRir);
   const missesMinimum = (sets: typeof current) => sets.some((set) => set.reps < prescription.repMin);
@@ -192,4 +192,43 @@ export function progressionRecommendation(sessions: WorkoutSession[], exerciseId
     return { type: 'decrease', title: 'Small load reduction available', text: `The minimum reps were missed in two consecutive sessions. Confirm ${targetWeightKg} kg next time (about 5–10% lower) and rebuild from the bottom of the range.`, targetWeightKg };
   }
   return { type: 'maintain', title: 'Keep this load', text: 'Add controlled repetitions inside the prescribed range before increasing weight. Training to failure is not required.' };
+}
+
+export function loadIncrementForExercise(exerciseId: string) {
+  const equipment = exerciseMap.get(exerciseId)?.requiredEquipment ?? [];
+  if (equipment.includes('Barbell')) return 2.5;
+  if (equipment.includes('Adjustable dumbbells')) return 1;
+  return .5;
+}
+
+export function smartRepTargets(previous: LoggedSet[], prescription: ExercisePrescription, count = prescription.sets) {
+  if (!previous.length) return Array.from({ length: count }, () => prescription.repMin);
+  const targets = Array.from({ length: count }, (_, index) => Math.max(prescription.repMin, Math.min(prescription.repMax, previous[index]?.reps ?? previous.at(-1)?.reps ?? prescription.repMin)));
+  for (let improvement = 0; improvement < 2; improvement += 1) {
+    const candidates = targets.map((reps, index) => ({ reps, index })).filter((item) => item.reps < prescription.repMax).sort((a, b) => a.reps - b.reps || a.index - b.index);
+    if (!candidates.length) break;
+    targets[candidates[0].index] += 1;
+  }
+  return targets;
+}
+
+export function warmupTargets(workingWeightKg: number, count: number, exerciseId: string) {
+  if (count <= 0) return [];
+  const plans = count === 1 ? [[.55, 8]] : count === 2 ? [[.5, 8], [.75, 4]] : [[.4, 10], [.6, 6], [.8, 3]];
+  const selected = count <= 3 ? plans : [...plans, ...Array.from({ length: count - 3 }, (_, index) => [.85 + index * .03, 2] as number[])];
+  const increment = loadIncrementForExercise(exerciseId);
+  return selected.slice(0, count).map(([percent, reps]) => ({
+    weightKg: workingWeightKg > 0 ? Math.max(increment, Math.round(workingWeightKg * percent / increment) * increment) : 0,
+    reps,
+  }));
+}
+
+export function progressionGoal(previous: LoggedSet[], targets: number[], workingWeightKg: number, prescription: ExercisePrescription) {
+  if (!previous.length) return `Build a controlled baseline of ${prescription.sets} × ${prescription.repMin}–${prescription.repMax}.`;
+  const previousWeight = previous.at(-1)?.weightKg ?? 0;
+  if (workingWeightKg > previousWeight) return `Progression earned: use ${workingWeightKg} kg and rebuild from ${prescription.repMin} reps.`;
+  const added = targets.reduce((sum, reps, index) => sum + Math.max(0, reps - (previous[index]?.reps ?? reps)), 0);
+  if (added > 0) return `Today's goal: +${added} total ${added === 1 ? 'rep' : 'reps'} at ${workingWeightKg} kg.`;
+  if (targets.every((reps) => reps >= prescription.repMax)) return `Match ${prescription.sets} × ${prescription.repMax} with clean reps before adding weight.`;
+  return 'Match last time with controlled technique and recover any missed repetitions.';
 }

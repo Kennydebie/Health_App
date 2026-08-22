@@ -14,13 +14,54 @@ export interface FoodServing {
   unit: 'g' | 'ml';
 }
 
-export interface FoodItem extends Macros {
+export type FoodProviderId = 'local' | 'usda' | 'open_food_facts' | 'custom' | 'corrected';
+export type FoodDataCompleteness = 'complete' | 'partial' | 'missing_serving' | 'unverified';
+
+export interface FoodItem {
   id: string;
   name: string;
   category: string;
   unit: 'g' | 'ml';
   image: string;
   servings: FoodServing[];
+  calories: number | null;
+  protein: number | null;
+  carbs: number | null;
+  fat: number | null;
+  fiber?: number | null;
+  sugar?: number | null;
+  salt?: number | null;
+  sodium?: number | null;
+  saltDerivedFromSodium?: boolean;
+  brand?: string;
+  barcode?: string;
+  preparation?: 'raw' | 'cooked' | 'dry' | 'prepared' | 'smoked' | 'canned';
+  country?: string;
+  packageSize?: string;
+  ingredients?: string;
+  allergens?: string;
+  dataCompleteness?: FoodDataCompleteness;
+  source?: {
+    provider: FoodProviderId;
+    providerName: string;
+    externalId: string;
+    retrievedAt: string;
+  };
+  isCustom?: boolean;
+  isCached?: boolean;
+  correctedFromId?: string;
+}
+
+export interface FoodLogSnapshot {
+  foodName: string;
+  brand?: string;
+  image: string;
+  unit: 'g' | 'ml';
+  amount: number;
+  servingLabel: string;
+  per100: Macros;
+  calculated: Macros;
+  source?: FoodItem['source'];
 }
 
 export interface FoodLogEntry {
@@ -31,12 +72,14 @@ export interface FoodLogEntry {
   servingId: string;
   quantity: number;
   createdAt: string;
+  snapshot?: FoodLogSnapshot;
 }
 
 export interface SavedMeal {
   id: string;
   name: string;
   items: Array<Pick<FoodLogEntry, 'foodId' | 'servingId' | 'quantity'>>;
+  createdAt?: string;
 }
 
 export interface DailyNutritionTargetSnapshot {
@@ -343,6 +386,7 @@ export interface LoggedSet {
   completed: boolean;
   isWarmup?: boolean;
   rir?: number;
+  skipped?: boolean;
 }
 
 export interface WorkoutSession {
@@ -355,6 +399,7 @@ export interface WorkoutSession {
   completedAt?: string;
   durationSeconds: number;
   sets: LoggedSet[];
+  exerciseNotes?: Record<string, string>;
 }
 
 export interface HabitEntry {
@@ -394,6 +439,7 @@ export interface AppData {
   favorites: string[];
   recentFoodIds: string[];
   savedMeals: SavedMeal[];
+  foodLibrary: FoodItem[];
   measurements: BodyMeasurement[];
   bodyGoals: BodyGoalSettings;
   weightLossPlans: WeightLossPlan[];
@@ -405,4 +451,5 @@ export interface AppData {
   weeklyCardioTarget: number;
   squatProgression: SquatProgressionState;
   progressionPlans: ProgressionPlan[];
+  exerciseRestPreferences: Record<string, number>;
 }

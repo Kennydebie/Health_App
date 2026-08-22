@@ -1,12 +1,14 @@
 import { sanitizeFitDaysDraft } from '../src/lib/fitdays';
 import { DataConflictError, readUserData, writeUserData, type D1Database } from './dataStore';
 import type { BodyMeasurementConfidence, BodyMeasurementValues } from '../src/types/models';
+import { lookupExternalBarcode, searchExternalFoods } from './foodProviders';
 
 interface Env {
   OPENAI_API_KEY?: string;
   OPENAI_VISION_MODEL?: string;
   FITDAYS_SESSION_SECRET?: string;
   DB?: D1Database;
+  USDA_API_KEY?: string;
 }
 
 interface RateWindow { count: number; resetAt: number; }
@@ -255,6 +257,26 @@ async function putUserData(request: Request, env: Env) {
   }
 }
 
+async function searchFoods(request: Request, env: Env) {
+  if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+  const url = new URL(request.url);
+  const query = (url.searchParams.get('q') ?? '').trim().slice(0, 80);
+  const page = Math.max(1, Math.min(10, Number(url.searchParams.get('page') ?? 1) || 1));
+  if (query.length < 2) return json({ code: 'query_too_short' }, 400);
+  try { return json(await searchExternalFoods(query, page, env)); }
+  catch { return json({ code: 'provider_unavailable' }, 503); }
+}
+
+async function lookupBarcode(request: Request) {
+  if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+  const barcode = decodeURIComponent(new URL(request.url).pathname.split('/').at(-1) ?? '').replace(/\s+/g, '');
+  if (!/^\d{8,14}$/.test(barcode)) return json({ code: 'invalid_barcode' }, 400);
+  try {
+    const food = await lookupExternalBarcode(barcode);
+    return food ? json({ food }) : json({ code: 'not_found' }, 404);
+  } catch { return json({ code: 'provider_unavailable' }, 503); }
+}
+
 export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
@@ -270,6 +292,9 @@ export default {
       return analyzeScreenshot(request, env);
     }
     if (url.pathname.startsWith('/api/fitdays/')) return json({ code: 'not_found' }, 404);
+    if (url.pathname === '/api/foods/search' && request.method === 'GET') return searchFoods(request, env);
+    if (url.pathname.startsWith('/api/foods/barcode/') && request.method === 'GET') return lookupBarcode(request);
+    if (url.pathname.startsWith('/api/foods/')) return json({ code: 'not_found' }, 404);
     return new Response(null, { status: 404 });
   },
 };

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { uid } from '../lib/id';
-import { buildProgramTemplate } from '../lib/workout';
+import { buildProgramTemplate, smartRepTargets, warmupTargets } from '../lib/workout';
 import { withDetectedOutliers } from '../lib/bodyMeasurements';
 import { dayIdForDate, moveTrainingSession as movePlannerSession, recalculateTrainingWeek, restoreRecommendedWeek as restorePlannerWeek, selectTrainingSession as selectPlannerSession, workoutTemplate } from '../lib/adaptivePlanner';
 import { toDateKey } from '../lib/date';
@@ -13,7 +13,9 @@ import { applyBodyMeasurement } from '../lib/dataTransactions';
 import { getNutritionTotals } from '../lib/selectors';
 import { emptyMeasurementValues } from '../lib/appDataMigration';
 import { createInitialData } from '../data/initialData';
-import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementDraft, BodyMetricKey, CardioEntry, FoodLogEntry, HabitEntry, LoggedSet, MealType, NutritionDayRecord, NutritionEvaluationSettings, ProgressionPlan, ReadinessResponse, SessionTemplateId, SquatProgressionLevel, TrainingDayPlan, TrainingSelectionSource, TrainingTemplate, UserProfile, WorkoutDay, WorkoutSession } from '../types/models';
+import { createFoodSnapshot, foodCanBeLogged } from '../lib/nutrition';
+import { resolveFood } from '../lib/foodCatalog';
+import type { AppData, BodyGoalSettings, BodyMeasurement, BodyMeasurementDraft, BodyMetricKey, CardioEntry, FoodItem, FoodLogEntry, HabitEntry, LoggedSet, MealType, NutritionDayRecord, NutritionEvaluationSettings, ProgressionPlan, ReadinessResponse, SessionTemplateId, SquatProgressionLevel, TrainingDayPlan, TrainingSelectionSource, TrainingTemplate, UserProfile, WorkoutDay, WorkoutSession } from '../types/models';
 
 export { migrateAppData } from '../lib/appDataMigration';
 
@@ -279,13 +281,19 @@ export function useAppData() {
     return () => window.clearInterval(timer);
   }, [update]);
 
-  const addFood = useCallback((entry: Omit<FoodLogEntry, 'id' | 'createdAt'>) => {
+  const addFood = useCallback((entry: Omit<FoodLogEntry, 'id' | 'createdAt' | 'snapshot'>, suppliedFood?: FoodItem) => {
     update((current) => {
+      const food = suppliedFood ?? resolveFood(current, entry.foodId);
+      if (!food || !foodCanBeLogged(food)) return current;
+      const snapshot = createFoodSnapshot(food, entry.servingId, entry.quantity);
+      if (!snapshot) return current;
       const target = nutritionTargetFromProfile(current.profile, entry.date, detectedTimezone());
       const hasApplicableTarget = current.nutritionTargetHistory.some((item) => item.date <= entry.date);
+      const shouldCache = food.source?.provider !== 'local' && !current.foodLibrary.some((item) => item.id === food.id);
       return {
         ...current,
-        foodLog: [...current.foodLog, { ...entry, id: uid('food'), createdAt: new Date().toISOString() }],
+        foodLog: [...current.foodLog, { ...entry, snapshot, id: uid('food'), createdAt: new Date().toISOString() }],
+        foodLibrary: shouldCache ? [...current.foodLibrary, { ...food, isCached: true }] : current.foodLibrary,
         recentFoodIds: [entry.foodId, ...current.recentFoodIds.filter((id) => id !== entry.foodId)].slice(0, 8),
         nutritionTargetHistory: hasApplicableTarget ? current.nutritionTargetHistory : upsertTargetSnapshot(current.nutritionTargetHistory, target),
       };
@@ -293,8 +301,19 @@ export function useAppData() {
   }, [update]);
 
   const updateFood = useCallback((id: string, changes: Partial<Pick<FoodLogEntry, 'meal' | 'servingId' | 'quantity'>>) => {
-    update((current) => ({ ...current, foodLog: current.foodLog.map((entry) => entry.id === id ? { ...entry, ...changes } : entry) }));
+    update((current) => ({ ...current, foodLog: current.foodLog.map((entry) => {
+      if (entry.id !== id) return entry;
+      const next = { ...entry, ...changes };
+      const food = resolveFood(current, entry.foodId);
+      const snapshot = food ? createFoodSnapshot(food, next.servingId, next.quantity) : null;
+      return snapshot ? { ...next, snapshot } : next;
+    }) }));
   }, [update]);
+
+  const saveFoodToLibrary = useCallback((food: FoodItem) => update((current) => ({
+    ...current,
+    foodLibrary: [...current.foodLibrary.filter((item) => item.id !== food.id), food],
+  })), [update]);
 
   const deleteFood = useCallback((id: string) => update((current) => ({ ...current, foodLog: current.foodLog.filter((entry) => entry.id !== id) })), [update]);
 
@@ -315,13 +334,26 @@ export function useAppData() {
     return { ...current, foodLog: [...current.foodLog, ...copies], nutritionTargetHistory: history };
   }), [update]);
 
-  const addSavedMeal = useCallback((savedMealId: string, date: string, meal: MealType) => update((current) => {
+  const addSavedMeal = useCallback((savedMealId: string, date: string, meal: MealType, scale = 1) => update((current) => {
     const saved = current.savedMeals.find((item) => item.id === savedMealId);
     if (!saved) return current;
-    const entries = saved.items.map((item) => ({ ...item, id: uid('food'), date, meal, createdAt: new Date().toISOString() }));
+    const entries = saved.items.flatMap((item): FoodLogEntry[] => {
+      const food = resolveFood(current, item.foodId);
+      const quantity = item.quantity * Math.max(.05, scale);
+      const snapshot = food ? createFoodSnapshot(food, item.servingId, quantity) : null;
+      return snapshot ? [{ ...item, quantity, snapshot, id: uid('food'), date, meal, createdAt: new Date().toISOString() }] : [];
+    });
     const history = current.nutritionTargetHistory.some((item) => item.date <= date) ? current.nutritionTargetHistory : upsertTargetSnapshot(current.nutritionTargetHistory, nutritionTargetFromProfile(current.profile, date));
     return { ...current, foodLog: [...current.foodLog, ...entries], nutritionTargetHistory: history };
   }), [update]);
+
+  const saveMealFromDiary = useCallback((name: string, date: string, meal: MealType) => update((current) => {
+    const items = current.foodLog.filter((entry) => entry.date === date && entry.meal === meal).map(({ foodId, servingId, quantity }) => ({ foodId, servingId, quantity }));
+    if (!name.trim() || !items.length) return current;
+    return { ...current, savedMeals: [...current.savedMeals, { id: uid('meal'), name: name.trim().slice(0, 80), items, createdAt: new Date().toISOString() }] };
+  }), [update]);
+
+  const deleteSavedMeal = useCallback((id: string) => update((current) => ({ ...current, savedMeals: current.savedMeals.filter((meal) => meal.id !== id) })), [update]);
 
   const copyNutritionDay = useCallback((sourceDate: string, targetDate: string) => update((current) => {
     const copies = current.foodLog.filter((entry) => entry.date === sourceDate).map((entry) => ({ ...entry, id: uid('food'), date: targetDate, createdAt: new Date().toISOString() }));
@@ -495,15 +527,20 @@ export function useAppData() {
       const workingLoad = confirmedLoad ?? previous.at(-1)?.weightKg ?? 0;
       const selectedLoad = lightVersion && workingLoad > 0 ? Math.round(workingLoad * .9 * 2) / 2 : workingLoad;
       const warmupCount = exercise.warmupSets ?? 0;
+      const warmupPlan = warmupTargets(selectedLoad, warmupCount, exercise.exerciseId);
       const warmups = Array.from({ length: warmupCount }, (_, index) => ({
         id: uid('set'), exerciseId: exercise.exerciseId, setNumber: index + 1,
-        weightKg: selectedLoad > 0 ? Math.round(selectedLoad * (.45 + index * .15) * 2) / 2 : 0,
-        reps: Math.max(4, 8 - index * 2), completed: false, isWarmup: true,
+        weightKg: warmupPlan[index]?.weightKg ?? 0,
+        reps: warmupPlan[index]?.reps ?? 5, completed: false, isWarmup: true,
       }));
-      const working = Array.from({ length: lightVersion ? Math.max(1, exercise.sets - 1) : exercise.sets }, (_, index) => ({
+      const workingCount = lightVersion ? Math.max(1, exercise.sets - 1) : exercise.sets;
+      const repTargets = confirmedLoad && confirmedLoad > (previous.at(-1)?.weightKg ?? 0)
+        ? Array.from({ length: workingCount }, () => exercise.repMin)
+        : smartRepTargets(previous, exercise, workingCount);
+      const working = Array.from({ length: workingCount }, (_, index) => ({
         id: uid('set'), exerciseId: exercise.exerciseId, setNumber: index + 1,
         weightKg: lightVersion ? selectedLoad : confirmedLoad ?? previous[index]?.weightKg ?? previous.at(-1)?.weightKg ?? 0,
-        reps: previous[index]?.reps ?? 0, completed: false, isWarmup: false,
+        reps: repTargets[index] ?? exercise.repMin, completed: false, isWarmup: false,
       }));
       return [...warmups, ...working];
     });
@@ -522,9 +559,39 @@ export function useAppData() {
 
   const discardWorkout = useCallback((sessionId: string) => update((current) => ({ ...current, sessions: current.sessions.filter((session) => session.id !== sessionId) })), [update]);
 
-  const updateWorkoutSet = useCallback((sessionId: string, setId: string, changes: Partial<Pick<LoggedSet, 'weightKg' | 'reps' | 'completed' | 'rir'>>) => update((current) => ({
+  const updateWorkoutSet = useCallback((sessionId: string, setId: string, changes: Partial<Pick<LoggedSet, 'weightKg' | 'reps' | 'completed' | 'rir' | 'skipped'>>) => update((current) => ({
     ...current,
     sessions: current.sessions.map((session) => session.id === sessionId ? { ...session, sets: session.sets.map((set) => set.id === setId ? { ...set, ...changes } : set) } : session),
+  })), [update]);
+
+  const updateWorkoutLoad = useCallback((sessionId: string, setId: string, weightKg: number, applyToRemaining = true) => update((current) => ({
+    ...current,
+    sessions: current.sessions.map((session) => {
+      if (session.id !== sessionId) return session;
+      const source = session.sets.find((set) => set.id === setId);
+      if (!source) return session;
+      const warmupPlan = warmupTargets(weightKg, session.sets.filter((set) => set.exerciseId === source.exerciseId && set.isWarmup).length, source.exerciseId);
+      return { ...session, sets: session.sets.map((set) => {
+        if (set.exerciseId !== source.exerciseId || set.completed || set.skipped) return set;
+        if (set.isWarmup) return { ...set, weightKg: warmupPlan[set.setNumber - 1]?.weightKg ?? set.weightKg, reps: warmupPlan[set.setNumber - 1]?.reps ?? set.reps };
+        return (set.id === setId || applyToRemaining) ? { ...set, weightKg } : set;
+      }) };
+    }),
+  })), [update]);
+
+  const setExerciseEffort = useCallback((sessionId: string, exerciseId: string, rir?: number) => update((current) => ({
+    ...current,
+    sessions: current.sessions.map((session) => session.id !== sessionId ? session : { ...session, sets: session.sets.map((set) => set.exerciseId === exerciseId && set.completed && !set.isWarmup ? { ...set, rir } : set) }),
+  })), [update]);
+
+  const updateExerciseNote = useCallback((sessionId: string, exerciseId: string, note: string) => update((current) => ({
+    ...current,
+    sessions: current.sessions.map((session) => session.id !== sessionId ? session : { ...session, exerciseNotes: { ...session.exerciseNotes, [exerciseId]: note.slice(0, 500) } }),
+  })), [update]);
+
+  const setExerciseRestPreference = useCallback((exerciseId: string, seconds: number) => update((current) => ({
+    ...current,
+    exerciseRestPreferences: { ...current.exerciseRestPreferences, [exerciseId]: Math.max(30, Math.min(600, seconds)) },
   })), [update]);
 
   const finishWorkout = useCallback((sessionId: string, durationSeconds: number) => update((current) => {
@@ -543,12 +610,12 @@ export function useAppData() {
   const totalsForDate = useCallback((date: string) => getNutritionTotals(data, date), [data]);
 
   return useMemo(() => ({
-    data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings,
+    data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveMealFromDiary, deleteSavedMeal, saveFoodToLibrary, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings,
     saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression,
-    startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, totalsForDate,
+    startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, updateWorkoutLoad, setExerciseEffort, updateExerciseNote, setExerciseRestPreference, finishWorkout, updateHabit, totalsForDate,
     syncStatus, syncMessage, lastSuccessfulSync, account, migrationPreview, migrationBackupAvailable,
     migrateLocalData, keepLocalOnly, retrySync, exportBackup, previewBackup, importBackup, removeLocalMigrationBackup,
-  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings, saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, finishWorkout, updateHabit, totalsForDate, syncStatus, syncMessage, lastSuccessfulSync, account, migrationPreview, migrationBackupAvailable, migrateLocalData, keepLocalOnly, retrySync, exportBackup, previewBackup, importBackup, removeLocalMigrationBackup]);
+  }), [data, addFood, updateFood, deleteFood, duplicateFood, toggleFavorite, repeatMeal, addSavedMeal, saveMealFromDiary, deleteSavedMeal, saveFoodToLibrary, copyNutritionDay, finishNutritionDay, setNutritionDayTreatment, updateNutritionSettings, saveWeight, saveBodyMeasurement, updateBodyGoals, saveWeightLossPlan, confirmMeasurementMetric, updateProfile, updateProgramDay, selectTrainingSession, skipTrainingDay, moveTrainingSession, restoreRecommendedWeek, recalculateTrainingPlan, keepCurrentTrainingWeek, addCardio, setWeeklyCardioTarget, setSquatProgression, applyTrainingTemplate, confirmProgression, startWorkout, startWorkoutTemplate, discardWorkout, updateWorkoutSet, updateWorkoutLoad, setExerciseEffort, updateExerciseNote, setExerciseRestPreference, finishWorkout, updateHabit, totalsForDate, syncStatus, syncMessage, lastSuccessfulSync, account, migrationPreview, migrationBackupAvailable, migrateLocalData, keepLocalOnly, retrySync, exportBackup, previewBackup, importBackup, removeLocalMigrationBackup]);
 }
 
 export type AppController = ReturnType<typeof useAppData>;

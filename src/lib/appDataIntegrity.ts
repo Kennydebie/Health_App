@@ -3,7 +3,7 @@ import type { AppData } from '../types/models';
 
 const COLLECTION_KEYS = [
   'foodLog', 'nutritionTargetHistory', 'nutritionDayRecords', 'favorites', 'recentFoodIds', 'savedMeals',
-  'measurements', 'weightLossPlans', 'program', 'sessions', 'habits', 'cardioLog', 'progressionPlans',
+  'foodLibrary', 'measurements', 'weightLossPlans', 'program', 'sessions', 'habits', 'cardioLog', 'progressionPlans',
 ] as const;
 
 const fixtureFoodIds = new Set([
@@ -52,6 +52,7 @@ export function validateAppData(value: unknown) {
   if (!isRecord(value.bodyGoals)) errors.push('Body goals are missing.');
   if (!isRecord(value.trainingPlanner) || !Array.isArray(value.trainingPlanner.dailyPlans)) errors.push('Training planner is invalid.');
   if (!isRecord(value.squatProgression)) errors.push('Squat progression is invalid.');
+  if (!isRecord(value.exerciseRestPreferences)) errors.push('Exercise rest preferences are invalid.');
   if (typeof value.weeklyCardioTarget !== 'number' || value.weeklyCardioTarget < 0 || value.weeklyCardioTarget > 2_000) errors.push('Weekly cardio target is invalid.');
   return { valid: errors.length === 0, errors };
 }
@@ -156,7 +157,7 @@ export function mergeAppData(remoteInput: AppData, localInput: AppData): MergeRe
   const data: AppData = {
     ...remote,
     ...local,
-    version: Math.max(remote.version, local.version, 10),
+    version: Math.max(remote.version, local.version, 11),
     profile: local.profile,
     foodLog: merge(remote.foodLog, local.foodLog, (item) => item.id, (item) => stableString({ ...item, id: undefined })),
     nutritionTargetHistory: merge(remote.nutritionTargetHistory, local.nutritionTargetHistory, (item) => item.date),
@@ -164,6 +165,7 @@ export function mergeAppData(remoteInput: AppData, localInput: AppData): MergeRe
     favorites: [...new Set([...remote.favorites, ...local.favorites])],
     recentFoodIds: [...new Set([...local.recentFoodIds, ...remote.recentFoodIds])].slice(0, 20),
     savedMeals: merge(remote.savedMeals, local.savedMeals, (item) => item.id, (item) => stableString({ ...item, id: undefined })),
+    foodLibrary: merge(remote.foodLibrary, local.foodLibrary, (item) => item.id),
     measurements: merge(remote.measurements, local.measurements, (item) => item.id, (item) => stableString({ measuredAt: item.measuredAt, weightKg: item.weightKg, source: item.source })),
     weightLossPlans: merge(remote.weightLossPlans, local.weightLossPlans, (item) => item.id),
     program: local.program,
@@ -175,6 +177,7 @@ export function mergeAppData(remoteInput: AppData, localInput: AppData): MergeRe
     habits: merge(remote.habits, local.habits, (item) => item.date),
     cardioLog: merge(remote.cardioLog, local.cardioLog, (item) => item.id, (item) => stableString({ ...item, id: undefined })),
     progressionPlans: merge(remote.progressionPlans, local.progressionPlans, (item) => item.exerciseId),
+    exerciseRestPreferences: { ...remote.exerciseRestPreferences, ...local.exerciseRestPreferences },
   };
   return { data, duplicates, conflicts };
 }

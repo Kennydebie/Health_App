@@ -10,7 +10,7 @@ export interface Project75Backup {
   exportedAt: string;
   appDataVersion: number;
   profile: AppData['profile'];
-  settings: Pick<AppData, 'nutritionSettings' | 'bodyGoals' | 'weeklyCardioTarget' | 'squatProgression'>;
+  settings: Pick<AppData, 'nutritionSettings' | 'bodyGoals' | 'weeklyCardioTarget' | 'squatProgression' | 'exerciseRestPreferences'>;
   nutritionEntries: AppData['foodLog'];
   nutritionTargetHistory: AppData['nutritionTargetHistory'];
   nutritionDayRecords: AppData['nutritionDayRecords'];
@@ -48,11 +48,12 @@ export function createBackup(data: AppData, now = new Date().toISOString()): Pro
       bodyGoals: data.bodyGoals,
       weeklyCardioTarget: data.weeklyCardioTarget,
       squatProgression: data.squatProgression,
+      exerciseRestPreferences: data.exerciseRestPreferences,
     },
     nutritionEntries: data.foodLog,
     nutritionTargetHistory: data.nutritionTargetHistory,
     nutritionDayRecords: data.nutritionDayRecords,
-    customFoods: [],
+    customFoods: data.foodLibrary,
     favorites: data.favorites,
     recentFoodIds: data.recentFoodIds,
     savedMeals: data.savedMeals,
@@ -77,12 +78,14 @@ export function backupToAppData(backup: Project75Backup): AppData {
     bodyGoals: backup.settings.bodyGoals,
     weeklyCardioTarget: backup.settings.weeklyCardioTarget,
     squatProgression: backup.settings.squatProgression,
+    exerciseRestPreferences: backup.settings.exerciseRestPreferences ?? {},
     foodLog: backup.nutritionEntries,
     nutritionTargetHistory: backup.nutritionTargetHistory,
     nutritionDayRecords: backup.nutritionDayRecords,
     favorites: backup.favorites,
     recentFoodIds: backup.recentFoodIds,
     savedMeals: backup.savedMeals,
+    foodLibrary: backup.customFoods ?? [],
     sessions: backup.workouts,
     program: backup.workoutTemplates,
     trainingPlanner: backup.trainingPlanner,

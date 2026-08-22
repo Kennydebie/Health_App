@@ -7,6 +7,11 @@ describe('app data migration', () => {
     id: session.id, date: session.date, dayId: session.dayId, title: session.title, startedAt: session.startedAt,
     completedAt: session.completedAt, durationSeconds: session.durationSeconds, sets: session.sets,
   }));
+  const withoutFoodSnapshots = (entries: ReturnType<typeof createSeedData>['foodLog']) => entries.map((entry) => {
+    const copy = structuredClone(entry);
+    delete copy.snapshot;
+    return copy;
+  });
 
   it('installs the revised program while preserving every logged user-data collection', () => {
     const saved = createSeedData();
@@ -20,11 +25,12 @@ describe('app data migration', () => {
 
     const migrated = migrateAppData(saved);
 
-    expect(migrated.version).toBe(10);
+    expect(migrated.version).toBe(11);
     expect(migrated.program).toHaveLength(7);
     expect(migrated.program.filter((day) => !day.isRestDay).map((day) => day.title)).toEqual(['Upper A', 'Lower A', 'Upper B', 'Lower B']);
     expect(migrated.profile).toMatchObject({ balanceLevel: 'beginner', trainingTemplate: 'four-day-upper-lower' });
-    expect(migrated.foodLog).toEqual(original.foodLog);
+    expect(withoutFoodSnapshots(migrated.foodLog)).toEqual(original.foodLog);
+    expect(migrated.foodLog.every((entry) => Boolean(entry.snapshot))).toBe(true);
     expect(migrated.favorites).toEqual(original.favorites);
     expect(migrated.recentFoodIds).toEqual(original.recentFoodIds);
     expect(migrated.savedMeals).toEqual(original.savedMeals);
@@ -69,7 +75,7 @@ describe('app data migration', () => {
   });
 
   it('preserves program-editor fields through a JSON storage round trip', () => {
-    const saved = createSeedData();
+    const saved = migrateAppData(createSeedData());
     saved.program[0].exercises[0] = { ...saved.program[0].exercises[0], sets: 4, restSeconds: 210, rir: '3', notes: 'Custom note', warmupSets: 4 };
     const reloaded = migrateAppData(JSON.parse(JSON.stringify(saved)));
     expect(reloaded.program[0].exercises[0]).toMatchObject({ sets: 4, restSeconds: 210, rir: '3', notes: 'Custom note', warmupSets: 4 });

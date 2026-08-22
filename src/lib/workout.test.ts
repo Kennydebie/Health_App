@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { defaultProgram, exercises } from '../data/exercises';
 import { createSeedData } from '../data/seed';
 import type { ProgramExercise, WorkoutSession } from '../types/models';
-import { analyzeWeeklyProgram, buildProgramTemplate, isEquipmentCompatible, progressionRecommendation, weeklyCardioMinutes } from './workout';
+import { analyzeWeeklyProgram, buildProgramTemplate, isEquipmentCompatible, progressionGoal, progressionRecommendation, smartRepTargets, warmupTargets, weeklyCardioMinutes } from './workout';
 
 describe('workout programming logic', () => {
   it('filters out exercises that require unavailable equipment', () => {
@@ -53,6 +53,17 @@ describe('workout programming logic', () => {
     const recommendation = progressionRecommendation(sessions, 'bench-press', prescription);
     expect(recommendation).toMatchObject({ type: 'increase', targetWeightKg: 52.5 });
     expect(sessions).toEqual(before);
+  });
+
+  it('predicts the next reps by adding two total reps to the lowest incomplete sets', () => {
+    const prescription: ProgramExercise = { exerciseId: 'bench-press', sets: 3, repMin: 6, repMax: 10, restSeconds: 180, rir: '2' };
+    const previous = [10, 9, 8].map((reps, index) => ({ id: `set-${index}`, exerciseId: 'bench-press', setNumber: index + 1, weightKg: 50, reps, completed: true }));
+    expect(smartRepTargets(previous, prescription)).toEqual([10, 10, 9]);
+    expect(progressionGoal(previous, [10, 10, 9], 50, prescription)).toBe("Today's goal: +2 total reps at 50 kg.");
+  });
+
+  it('generates rounded warm-up targets from the working load', () => {
+    expect(warmupTargets(50, 3, 'bench-press')).toEqual([{ weightKg: 20, reps: 10 }, { weightKg: 30, reps: 6 }, { weightKg: 40, reps: 3 }]);
   });
 
   it('tracks only cardio entries inside the current Monday–Sunday week', () => {

@@ -5,6 +5,8 @@ import { DEFAULT_TRAINING_PLANNER, recalculateTrainingWeek } from './adaptivePla
 import { DEFAULT_NUTRITION_SETTINGS, detectedTimezone, nutritionTargetFromProfile } from './nutritionEvaluation';
 import { toDateKey } from './date';
 import { uid } from './id';
+import { foodMap } from '../data/foods';
+import { createFoodSnapshot } from './nutrition';
 import type {
   AppData,
   BodyGoalSettings,
@@ -19,6 +21,7 @@ import type {
   WeightLossPlan,
   WorkoutDay,
   WorkoutId,
+  FoodItem,
 } from '../types/models';
 
 const workoutIds = new Set<WorkoutId>(['upper_a', 'lower_a', 'upper_b', 'lower_b', 'full_body_a', 'full_body_b', 'full_body_c']);
@@ -61,7 +64,7 @@ type LegacyMeasurement = Partial<BodyMeasurement> & {
   confidence?: BodyMeasurementConfidence & { timestamp?: number | null };
 };
 
-export type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals' | 'weightLossPlans' | 'trainingPlanner' | 'nutritionTargetHistory' | 'nutritionSettings' | 'nutritionDayRecords'> & {
+export type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals' | 'weightLossPlans' | 'trainingPlanner' | 'nutritionTargetHistory' | 'nutritionSettings' | 'nutritionDayRecords' | 'foodLibrary' | 'exerciseRestPreferences'> & {
   profile: UserProfile & { startWeightKg?: number; currentWeightKg?: number };
   measurements?: LegacyMeasurement[];
   bodyMeasurements?: LegacyMeasurement[];
@@ -72,6 +75,8 @@ export type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoal
   nutritionSettings?: Partial<NutritionEvaluationSettings>;
   nutritionDayRecords?: NutritionDayRecord[];
   trainingPlanner?: Partial<TrainingPlannerState>;
+  foodLibrary?: FoodItem[];
+  exerciseRestPreferences?: Record<string, number>;
 };
 
 export const emptyMeasurementValues = {
@@ -125,6 +130,13 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
     ? combinedMeasurements.filter((measurement) => !measurement.isDemo)
     : combinedMeasurements);
   const firstNutritionDate = (legacy.foodLog ?? []).map((entry) => entry.date).sort()[0] ?? toDateKey();
+  const foodLibrary = legacy.foodLibrary ?? [];
+  const migratedFoodLog = (legacy.foodLog ?? []).map((entry) => {
+    if (entry.snapshot) return entry;
+    const food = foodLibrary.find((item) => item.id === entry.foodId) ?? foodMap.get(entry.foodId);
+    const snapshot = food ? createFoodSnapshot(food, entry.servingId, entry.quantity) : null;
+    return snapshot ? { ...entry, snapshot } : entry;
+  });
   const nutritionTargetHistory = legacy.nutritionTargetHistory?.length
     ? legacy.nutritionTargetHistory
     : [nutritionTargetFromProfile(profile as UserProfile, firstNutritionDate, detectedTimezone())];
@@ -137,10 +149,11 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
       balanceLevel: profile.balanceLevel ?? 'beginner',
       trainingTemplate: profile.trainingTemplate ?? 'four-day-upper-lower',
     },
-    foodLog: legacy.foodLog ?? [],
+    foodLog: migratedFoodLog,
     favorites: legacy.favorites ?? [],
     recentFoodIds: legacy.recentFoodIds ?? [],
     savedMeals: legacy.savedMeals ?? [],
+    foodLibrary,
     sessions: legacy.sessions ?? [],
     habits: legacy.habits ?? [],
     program: needsProgramUpgrade ? structuredClone(defaultProgram) : legacy.program,
@@ -169,6 +182,7 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
     weeklyCardioTarget: legacy.weeklyCardioTarget ?? 105,
     squatProgression: legacy.squatProgression ?? fallback.squatProgression,
     progressionPlans: legacy.progressionPlans ?? [],
+    exerciseRestPreferences: legacy.exerciseRestPreferences ?? {},
   };
   const template = base.profile.trainingTemplate;
   const program = base.program.map((day) => day.isRestDay ? { ...day, workoutId: undefined } : { ...day, workoutId: inferWorkoutId(day, template) });
@@ -180,6 +194,6 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
       ?? programByDay.get(legacySession.dayId)?.workoutId;
     return { ...session, workoutId: workoutId ?? `legacy_${legacySession.dayId}` };
   });
-  const migrated = { ...base, version: 10, program, sessions };
+  const migrated = { ...base, version: 11, program, sessions };
   return { ...migrated, trainingPlanner: recalculateTrainingWeek(migrated) };
 }

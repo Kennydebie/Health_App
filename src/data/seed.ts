@@ -92,6 +92,7 @@ export function createSeedData(): AppData {
       { foodId: 'walnuts', servingId: 'handful', quantity: 0.75 },
       { foodId: 'honey', servingId: 'teaspoon', quantity: 1 },
     ] }],
+    foodLibrary: [],
     measurements: structuredClone(measurements),
     bodyGoals: structuredClone(DEFAULT_BODY_GOALS),
     weightLossPlans: [],
@@ -103,5 +104,6 @@ export function createSeedData(): AppData {
     weeklyCardioTarget: 105,
     squatProgression: { currentLevel: 'assisted-squat', stableSessions: 0, updatedAt: now },
     progressionPlans: [],
+    exerciseRestPreferences: {},
   };
 }

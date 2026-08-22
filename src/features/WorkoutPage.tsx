@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Activity, AlertTriangle, ArrowLeft, BadgeCheck, BarChart3, BedDouble, CalendarDays, Check, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock3, Dumbbell, ExternalLink, Flame, Footprints, GripVertical, HeartPulse, History, Info, ListChecks, Minus, Move, Pause, Pencil, Play, Plus, RefreshCw, Save, ShieldCheck, Shuffle, SkipForward, Sparkles, Target, Trophy, X } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { AnatomicalMuscleMap, MuscleMapLegend } from '../components/AnatomicalMuscleMap';
@@ -8,7 +8,7 @@ import { prettyDate, toDateKey } from '../lib/date';
 import { datesInCalendarMonth, displayWorkoutTitle, getWeekSnapshot } from '../lib/engagement';
 import { formatDuration, workoutVolume } from '../lib/progress';
 import { combinedMuscleExposure, exposureMuscleMap, exerciseMuscleMap, muscleList, MUSCLE_LABELS } from '../lib/muscles';
-import { analyzeWeeklyProgram, exceedsBalanceLevel, isEquipmentCompatible, progressionRecommendation, squatProgressionLevels, squatReadinessCriteria } from '../lib/workout';
+import { analyzeWeeklyProgram, exceedsBalanceLevel, isEquipmentCompatible, loadIncrementForExercise, progressionGoal, progressionRecommendation, squatProgressionLevels, squatReadinessCriteria } from '../lib/workout';
 import { availableSessionOptions, isStrengthTemplate, lastPerformed, plannerWarnings, recoveryForSession, selectionSourceLabel, sessionOption, sessionType, weeklyBalance, weekDates, workoutTemplate } from '../lib/adaptivePlanner';
 import type { AppController } from '../state/useAppData';
 import type { CardioEntry, Exercise, LoggedSet, ProgramExercise, ReadinessResponse, SessionTemplateId, TrainingDayPlan, TrainingTemplate, UserProfile, WorkoutDay, WorkoutSession } from '../types/models';
@@ -120,21 +120,18 @@ function ProgramEditor({ day, program, profile, onSave, onClose }: { day: Workou
   </Modal>;
 }
 
-interface RestTimerProps { initialSeconds: number; onClose: () => void; }
-function RestTimer({ initialSeconds, onClose }: RestTimerProps) {
-  const [preset, setPreset] = useState(initialSeconds);
+interface RestTimerProps { initialSeconds: number; recommendedSeconds: number; onClose: () => void; onRemember: (seconds: number) => void; }
+function RestTimer({ initialSeconds, recommendedSeconds, onClose, onRemember }: RestTimerProps) {
+  const [total, setTotal] = useState(initialSeconds);
   const [remaining, setRemaining] = useState(initialSeconds);
   const [running, setRunning] = useState(true);
   useEffect(() => { if (!running || remaining <= 0) return; const timer = window.setInterval(() => setRemaining((value) => Math.max(0, value - 1)), 1000); return () => window.clearInterval(timer); }, [running, remaining]);
   useEffect(() => { if (remaining !== 0 || !('vibrate' in navigator)) return; navigator.vibrate([150, 80, 150]); }, [remaining]);
-  const choose = (seconds: number) => { setPreset(seconds); setRemaining(seconds); setRunning(true); };
-  const percent = Math.max(0, Math.min(100, remaining / Math.max(1, preset) * 100));
-  return <div className={`rest-timer ${remaining === 0 ? 'complete' : ''} ${remaining <= 10 ? 'nearly-ready' : ''}`}>
-    <div className="rest-timer__top"><p className="eyebrow">Rest timer</p><button className="icon-button" type="button" onClick={onClose} aria-label="Close rest timer"><X size={18} /></button></div>
-    <div className="timer-dial" style={{ '--timer-progress': `${percent * 3.6}deg` } as CSSProperties}><div><Clock3 size={18} /><h2>{remaining === 0 ? 'Ready' : formatDuration(remaining)}</h2><span>{remaining === 0 ? 'Next set' : 'Recover'}</span></div></div>
-    <div className="timer-presets">{[60, 90, 120, 180].map((seconds) => <button type="button" className={preset === seconds ? 'active' : ''} key={seconds} onClick={() => choose(seconds)}>{seconds}s</button>)}</div>
-    <div className="timer-controls"><button type="button" onClick={() => setRunning((value) => !value)}>{running ? <Pause size={17} /> : <Play size={17} />}{running ? 'Pause' : 'Resume'}</button><button type="button" onClick={() => { setRemaining((value) => value + 30); setPreset((value) => value + 30); setRunning(true); }}><Plus size={17} /> 30 sec</button><button type="button" onClick={onClose}><SkipForward size={17} /> Skip</button></div>
-  </div>;
+  const addThirty = () => { setRemaining((value) => value + 30); setTotal((value) => value + 30); setRunning(true); };
+  return <aside className={`rest-timer rest-timer--compact ${remaining === 0 ? 'complete' : ''}`} aria-live="polite">
+    <div className="rest-compact-status"><Clock3 size={18}/><span>{remaining === 0 ? 'Ready' : 'Rest'}</span><strong>{remaining === 0 ? 'Next set' : formatDuration(remaining)}</strong><small>{total === recommendedSeconds ? `${formatDuration(recommendedSeconds)} recommended` : `${formatDuration(total)} selected`}</small></div>
+    <div className="timer-controls"><button type="button" onClick={addThirty}><Plus size={17}/> 30 sec</button><button type="button" onClick={() => setRunning((value) => !value)}>{running ? <Pause size={17}/> : <Play size={17}/>}<span>{running ? 'Pause' : 'Resume'}</span></button>{total !== recommendedSeconds ? <button type="button" onClick={() => onRemember(total)}><Save size={17}/><span>Remember</span></button> : null}<button type="button" onClick={onClose}><SkipForward size={17}/> Skip</button></div>
+  </aside>;
 }
 
 function ActiveWorkout({ controller, session, onBack, onFinished }: { controller: AppController; session: WorkoutSession; onBack: () => void; onFinished: () => void }) {
@@ -147,9 +144,10 @@ function ActiveWorkout({ controller, session, onBack, onFinished }: { controller
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
   const [details, setDetails] = useState<Exercise | null>(null);
   const [playingExerciseId, setPlayingExerciseId] = useState<string | null>(null);
-  const [confirmedExerciseId, setConfirmedExerciseId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ tone: 'standard' | 'improved' | 'record'; text: string } | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [effortSkippedExerciseId, setEffortSkippedExerciseId] = useState<string | null>(null);
+  const [autoAdvance, setAutoAdvance] = useState(() => localStorage.getItem('project75:auto-advance-exercise') !== 'false');
   useEffect(() => { const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000); return () => window.clearInterval(timer); }, []);
   useEffect(() => { if (!feedback) return; const timer = window.setTimeout(() => setFeedback(null), 2400); return () => window.clearTimeout(timer); }, [feedback]);
   const currentExercise = exerciseMap.get(exerciseId) ?? exerciseMap.get(day.exercises[0]?.exerciseId);
@@ -163,6 +161,15 @@ function ActiveWorkout({ controller, session, onBack, onFinished }: { controller
   const totalWorking = session.sets.filter((set) => !set.isWarmup).length;
   const currentWorkingSets = currentSets.filter((set) => !set.isWarmup);
   const currentWorkingCompleted = currentWorkingSets.filter((set) => set.completed).length;
+  const pendingSet = currentSets.find((set) => !set.completed && !set.skipped);
+  const completedSets = currentSets.filter((set) => set.completed || set.skipped);
+  const upcomingSets = currentSets.filter((set) => set.id !== pendingSet?.id && !set.completed && !set.skipped);
+  const allCurrentSetsResolved = currentSets.length > 0 && currentSets.every((set) => set.completed || set.skipped);
+  const effortRecorded = currentWorkingSets.some((set) => set.completed && set.rir != null) || effortSkippedExerciseId === exerciseId;
+  const workingWeight = currentWorkingSets.find((set) => !set.completed)?.weightKg ?? currentWorkingSets.at(-1)?.weightKg ?? 0;
+  const targetReps = currentWorkingSets.map((set) => set.reps);
+  const goal = progressionGoal(previous, targetReps, workingWeight, prescription);
+  const restPreference = controller.data.exerciseRestPreferences[exerciseId] ?? prescription.restSeconds;
   const nextExerciseId = exerciseOrder[exerciseOrder.indexOf(exerciseId) + 1];
   const nextExercise = nextExerciseId ? exerciseMap.get(nextExerciseId) : undefined;
   const previousSession = [...controller.data.sessions].reverse().find((item) => item.id !== session.id && item.completedAt && item.workoutId === session.workoutId);
@@ -174,9 +181,10 @@ function ActiveWorkout({ controller, session, onBack, onFinished }: { controller
     const priorBest = Math.max(0, ...controller.data.sessions.filter((item) => item.id !== session.id && item.completedAt).flatMap((item) => item.sets).filter((set) => set.exerciseId === id && set.completed && !set.isWarmup).map((set) => set.weightKg * (1 + set.reps / 30)));
     return currentBest > priorBest && currentBest > 0;
   }).length;
-  const selectExercise = (id: string) => { setExerciseId(id); setPlayingExerciseId(null); };
+  const selectExercise = (id: string) => { setExerciseId(id); setPlayingExerciseId(null); setRestSeconds(null); };
+  const goToNextExercise = () => { if (nextExerciseId) selectExercise(nextExerciseId); };
   const completeSet = (set: LoggedSet) => {
-    controller.updateWorkoutSet(session.id, set.id, { completed: !set.completed });
+    controller.updateWorkoutSet(session.id, set.id, { completed: !set.completed, skipped: false });
     if (set.completed) return;
     if (!set.isWarmup) {
       const comparable = previous.find((item) => item.setNumber === set.setNumber) ?? previous[set.setNumber - 1];
@@ -187,7 +195,18 @@ function ActiveWorkout({ controller, session, onBack, onFinished }: { controller
       else if (comparable && set.weightKg === comparable.weightKg && set.reps === comparable.reps) setFeedback({ tone: 'standard', text: 'Matched last session' });
       else setFeedback({ tone: 'standard', text: 'Set complete' });
     } else setFeedback({ tone: 'standard', text: 'Warm-up complete' });
-    setRestSeconds(set.isWarmup ? 60 : prescription.restSeconds);
+    setRestSeconds(set.isWarmup ? 60 : restPreference);
+  };
+  const adjustWeight = (set: LoggedSet, amount: number) => {
+    const value = Math.max(0, Math.round((set.weightKg + amount) * 10) / 10);
+    if (set.isWarmup) controller.updateWorkoutSet(session.id, set.id, { weightKg: value });
+    else controller.updateWorkoutLoad(session.id, set.id, value, true);
+  };
+  const adjustReps = (set: LoggedSet, amount: number) => controller.updateWorkoutSet(session.id, set.id, { reps: Math.max(0, Math.min(100, set.reps + amount)) });
+  const recordEffort = (rir?: number) => {
+    controller.setExerciseEffort(session.id, exerciseId, rir);
+    if (rir == null) setEffortSkippedExerciseId(exerciseId);
+    if (autoAdvance) goToNextExercise();
   };
 
   return <div className="active-workout page workout-page">
@@ -196,28 +215,31 @@ function ActiveWorkout({ controller, session, onBack, onFinished }: { controller
     <div className="session-progress"><span style={{ width: `${totalWorking ? workingCompleted / totalWorking * 100 : 0}%` }} /></div>
     <div className="active-layout">
       <aside className="session-exercises"><p className="eyebrow">Exercise order</p>{exerciseOrder.map((itemExerciseId, index) => { const sets = session.sets.filter((set) => set.exerciseId === itemExerciseId && !set.isWarmup); const done = sets.filter((set) => set.completed).length; return <button type="button" key={itemExerciseId} onClick={() => selectExercise(itemExerciseId)} className={exerciseId === itemExerciseId ? 'active' : done === sets.length && sets.length > 0 ? 'done' : ''}><span>{done === sets.length && sets.length > 0 ? <Check size={16} /> : index + 1}</span><p>{exerciseMap.get(itemExerciseId)?.name}<small>{done} / {sets.length} working sets</small></p><ChevronRight size={17} /></button>; })}<button type="button" className="finish-session" onClick={() => setSummaryOpen(true)} disabled={workingCompleted === 0}><Trophy size={18} /> Review workout</button></aside>
-      <section className="set-logger">
+      <section className="set-logger prediction-logger">
         <div className={`active-exercise-hero ${playingExerciseId === currentExercise.id ? 'video-playing' : ''}`}>
           {currentExercise.video.status === 'verified' && playingExerciseId === currentExercise.id ? <div className="inline-video-player"><iframe src={currentExercise.video.embedUrl} title={`${currentExercise.name} technique video by ${currentExercise.video.sourceName}`} referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /><button type="button" onClick={() => setPlayingExerciseId(null)} aria-label="Close inline video"><X size={16} /></button></div> : <button type="button" className="exercise-visual-button" onClick={() => currentExercise.video.status === 'verified' ? setPlayingExerciseId(currentExercise.id) : setDetails(currentExercise)} aria-label={currentExercise.video.status === 'verified' ? `Play ${currentExercise.name} technique video inline` : `Open ${currentExercise.name} muscle and technique guide`}>{currentExercise.video.status === 'verified' ? <img src={`https://i.ytimg.com/vi/${currentExercise.video.sourceId}/hqdefault.jpg`} alt={`${currentExercise.name} video thumbnail`} loading="lazy" /> : <AnatomicalMuscleMap map={currentExercise.muscleMap} size="session" />}<span><Play size={18} /> {currentExercise.video.status === 'verified' ? 'Watch video' : 'Technique guide'}</span></button>}
-          <div><p className="eyebrow">Current exercise · Set {Math.min(currentWorkingCompleted + 1, currentWorkingSets.length)} of {currentWorkingSets.length}</p><h2>{currentExercise.name}</h2><div className="active-muscle-row"><div className="active-muscles">{currentExercise.muscleMap.primary.map((muscle) => <span key={muscle}>{MUSCLE_LABELS[muscle]}</span>)}</div><button type="button" className="active-anatomy-button" onClick={() => setDetails(currentExercise)} aria-label={`Open ${currentExercise.name} anatomical muscle map`}><AnatomicalMuscleMap map={currentExercise.muscleMap} size="preview" /><span>View muscles</span></button></div><p>Target <strong>{prescription.sets} × {prescription.repMin}–{prescription.repMax}</strong> · {prescription.rir} RIR · {formatDuration(prescription.restSeconds)} rest</p>{prescription.notes ? <small className="exercise-note">{prescription.notes}</small> : null}<button type="button" className="inline-technique-guide" onClick={() => setDetails(currentExercise)}><ListChecks size={15} /> Technique & safety guide</button></div>
+          <div><p className="eyebrow">Exercise {exerciseOrder.indexOf(exerciseId) + 1} of {exerciseOrder.length} · {currentWorkingCompleted}/{currentWorkingSets.length} working sets</p><h2>{currentExercise.name}</h2><div className="active-muscle-row"><div className="active-muscles">{currentExercise.muscleMap.primary.map((muscle) => <span key={muscle}>{MUSCLE_LABELS[muscle]}</span>)}</div><button type="button" className="active-anatomy-button" onClick={() => setDetails(currentExercise)} aria-label={`Open ${currentExercise.name} anatomical muscle map`}><AnatomicalMuscleMap map={currentExercise.muscleMap} size="preview"/><span>View muscles</span></button></div><p>Target <strong>{prescription.sets} × {prescription.repMin}–{prescription.repMax}</strong> · {formatDuration(restPreference)} rest</p>{prescription.notes ? <small className="exercise-note">{prescription.notes}</small> : null}<button type="button" className="inline-technique-guide" onClick={() => setDetails(currentExercise)}><ListChecks size={15}/> Technique & safety guide</button></div>
         </div>
-        <div className="previous-performance"><span>Previous working sets</span>{previous.length ? previous.map((set) => <strong key={set.id}>{set.weightKg} kg × {set.reps}</strong>) : <em>No previous performance—start conservatively.</em>}</div>
+        <div className="prediction-context"><div className="previous-performance"><span>Last time</span>{previous.length ? previous.map((set) => <strong key={set.id}>{set.weightKg} kg × {set.reps}</strong>) : <em>No previous performance yet.</em>}</div><div className="today-goal"><Target size={17}/><p><span>Today’s goal</span><strong>{goal}</strong></p></div></div>
         {feedback ? <div className={`set-feedback ${feedback.tone}`}><CheckCircle2 size={18} /><strong>{feedback.text}</strong>{feedback.tone === 'record' ? <Sparkles size={16} /> : null}</div> : null}
-        {currentSets.some((set) => set.isWarmup) ? <div className="warmup-explainer"><Info size={16} /><p><strong>Warm-up sets are separate.</strong> They prepare the movement and do not count toward working-set volume or progression.</p></div> : null}
-        <div className="set-timeline" aria-label="Current exercise set progress">{currentSets.map((set) => <span className={`${set.completed ? 'complete' : ''} ${set.isWarmup ? 'warmup' : ''}`} key={set.id}>{set.isWarmup ? `W${set.setNumber}` : set.setNumber}</span>)}</div>
-        <div className="set-table"><div className="set-table__head"><span>Set</span><span>Weight</span><span>Reps</span><span>RIR</span><span>Done</span></div>{currentSets.map((set) => <div className={`set-row ${set.completed ? 'complete' : ''} ${set.isWarmup ? 'warmup' : ''}`} key={set.id}>
-          <strong>{set.isWarmup ? `W${set.setNumber}` : set.setNumber}</strong>
-          <label><span className="sr-only">{set.isWarmup ? 'Warm-up' : 'Working'} set {set.setNumber} weight</span><input inputMode="decimal" min="0" step="0.5" type="number" value={set.weightKg || ''} onChange={(event) => controller.updateWorkoutSet(session.id, set.id, { weightKg: Math.max(0, Number(event.target.value)) })} /></label>
-          <label><span className="sr-only">Set {set.setNumber} reps</span><input inputMode="numeric" min="0" max="100" type="number" value={set.reps || ''} onChange={(event) => controller.updateWorkoutSet(session.id, set.id, { reps: Math.max(0, Number(event.target.value)) })} /></label>
-          {set.isWarmup ? <span className="warmup-rir">—</span> : <label><span className="sr-only">Set {set.setNumber} reps in reserve</span><input aria-label={`Set ${set.setNumber} reps in reserve`} inputMode="numeric" min="0" max="5" type="number" value={set.rir ?? ''} onChange={(event) => controller.updateWorkoutSet(session.id, set.id, { rir: event.target.value === '' ? undefined : Math.max(0, Math.min(5, Number(event.target.value))) })} /></label>}
-          <button type="button" onClick={() => completeSet(set)} disabled={!set.completed && set.reps <= 0} aria-label={`${set.completed ? 'Unmark' : 'Complete'} ${set.isWarmup ? 'warm-up' : 'working'} set ${set.setNumber}`}>{set.completed ? <Check size={19} /> : <span />}</button>
-        </div>)}</div>
-        <p className="rir-explainer"><Info size={15} /><span><strong>RIR means reps in reserve.</strong> Enter how many clean repetitions you realistically had left after each working set.</span></p>
-        {progress ? <div className={`progression-callout ${progress.type === 'increase' ? 'earned' : progress.type}`}><Sparkles size={20} /><p><strong>{progress.title}</strong>{progress.text}</p>{progress.targetWeightKg ? <button type="button" disabled={confirmedExerciseId === exerciseId} onClick={() => { controller.confirmProgression(exerciseId, progress.targetWeightKg!, progress.type as 'increase' | 'decrease'); setConfirmedExerciseId(exerciseId); }}>{confirmedExerciseId === exerciseId ? <><Check size={15} /> Confirmed</> : `Use ${progress.targetWeightKg} kg next time`}</button> : null}</div> : null}
+        {currentSets.some((set) => set.isWarmup) ? <section className="warmup-sets"><header><div><p className="eyebrow">Warm-up</p><h3>Prepare the movement</h3></div><span>Doesn’t count toward volume</span></header>{currentSets.filter((set) => set.isWarmup).map((set) => <button type="button" className={`${set.completed ? 'complete' : ''} ${pendingSet?.id === set.id ? 'current' : ''}`} key={set.id} onClick={() => completeSet(set)}><span>{set.completed ? <Check size={16}/> : `W${set.setNumber}`}</span><strong>{set.weightKg || 'Bodyweight'}{set.weightKg ? ' kg' : ''} × {set.reps}</strong><small>{set.completed ? 'Completed' : pendingSet?.id === set.id ? 'Tap to complete' : 'Upcoming'}</small></button>)}</section> : null}
+        <div className="set-timeline" aria-label="Current exercise set progress">{currentSets.map((set) => <span className={`${set.completed ? 'complete' : ''} ${set.skipped ? 'skipped' : ''} ${pendingSet?.id === set.id ? 'current' : ''} ${set.isWarmup ? 'warmup' : ''}`} key={set.id}>{set.isWarmup ? `W${set.setNumber}` : set.setNumber}</span>)}</div>
+        {pendingSet ? <section className={`current-set-card ${pendingSet.isWarmup ? 'is-warmup' : ''}`}>
+          <header><div><p className="eyebrow">Up now</p><h3>{pendingSet.isWarmup ? `Warm-up ${pendingSet.setNumber}` : `Working set ${pendingSet.setNumber} of ${currentWorkingSets.length}`}</h3></div><span>{pendingSet.isWarmup ? 'Technique first' : `${prescription.repMin}–${prescription.repMax} rep range`}</span></header>
+          <div className="set-prediction-controls"><div><span>Weight</span><div><button type="button" onClick={() => adjustWeight(pendingSet, -loadIncrementForExercise(exerciseId))} aria-label="Decrease weight"><Minus size={19}/></button><label><input type="number" inputMode="decimal" min="0" step={loadIncrementForExercise(exerciseId)} value={pendingSet.weightKg || ''} onChange={(event) => { const value = Math.max(0, Number(event.target.value)); if (pendingSet.isWarmup) controller.updateWorkoutSet(session.id, pendingSet.id, { weightKg: value }); else controller.updateWorkoutLoad(session.id, pendingSet.id, value, true); }}/><small>kg</small></label><button type="button" onClick={() => adjustWeight(pendingSet, loadIncrementForExercise(exerciseId))} aria-label="Increase weight"><Plus size={19}/></button></div></div><div><span>Reps</span><div><button type="button" onClick={() => adjustReps(pendingSet, -1)} aria-label="Decrease repetitions"><Minus size={19}/></button><label><input type="number" inputMode="numeric" min="0" max="100" value={pendingSet.reps || ''} onChange={(event) => controller.updateWorkoutSet(session.id, pendingSet.id, { reps: Math.max(0, Number(event.target.value)) })}/><small>reps</small></label><button type="button" onClick={() => adjustReps(pendingSet, 1)} aria-label="Increase repetitions"><Plus size={19}/></button></div></div></div>
+          <button type="button" className="complete-set-button" disabled={pendingSet.reps <= 0} onClick={() => completeSet(pendingSet)}><Check size={21}/> Complete {pendingSet.isWarmup ? 'warm-up' : 'set'} · {pendingSet.weightKg ? `${pendingSet.weightKg} kg × ` : ''}{pendingSet.reps}</button>
+          <button type="button" className="skip-set-button" onClick={() => controller.updateWorkoutSet(session.id, pendingSet.id, { skipped: true, completed: false })}><SkipForward size={15}/> Skip this set</button>
+        </section> : null}
+        {completedSets.length || upcomingSets.length ? <section className="set-state-list"><p className="eyebrow">Set overview</p>{currentSets.filter((set) => set.id !== pendingSet?.id).map((set) => <button type="button" key={set.id} className={`${set.completed ? 'complete' : ''} ${set.skipped ? 'skipped' : ''}`} disabled={!set.completed && !set.skipped} onClick={() => set.completed ? completeSet(set) : controller.updateWorkoutSet(session.id, set.id, { skipped: false })}><span>{set.completed ? <Check size={15}/> : set.skipped ? <SkipForward size={14}/> : set.isWarmup ? `W${set.setNumber}` : set.setNumber}</span><strong>{set.isWarmup ? 'Warm-up' : `Set ${set.setNumber}`} · {set.weightKg ? `${set.weightKg} kg × ` : ''}{set.reps}</strong><small>{set.completed ? 'Completed · tap to edit' : set.skipped ? 'Skipped · tap to restore' : 'Upcoming'}</small></button>)}</section> : null}
+        {allCurrentSetsResolved && currentWorkingCompleted > 0 && !effortRecorded ? <section className="effort-check"><div><p className="eyebrow">Exercise complete</p><h3>How hard did the working sets feel?</h3><p>One answer replaces RIR entry on every set.</p></div><div>{[{ label: 'Easy', detail: '4+ reps left', rir: 4 }, { label: 'Good', detail: 'About 2 left', rir: 2 }, { label: 'Hard', detail: 'About 1 left', rir: 1 }, { label: 'Maxed', detail: 'No reps left', rir: 0 }].map((option) => <button type="button" key={option.label} onClick={() => recordEffort(option.rir)}><strong>{option.label}</strong><span>{option.detail}</span></button>)}</div><button type="button" className="text-button" onClick={() => recordEffort(undefined)}>Skip effort rating</button></section> : null}
+        {allCurrentSetsResolved && (effortRecorded || currentWorkingCompleted === 0) && nextExercise ? <button type="button" className="primary-button full" onClick={goToNextExercise}>Continue to {nextExercise.name} <ChevronRight size={18}/></button> : null}
+        <details className="exercise-session-note"><summary><Pencil size={15}/> Exercise note <span>{session.exerciseNotes?.[exerciseId] ? 'Saved' : 'Optional'}</span></summary><textarea value={session.exerciseNotes?.[exerciseId] ?? ''} placeholder="Technique cue, setup detail or reminder for next time…" onChange={(event) => controller.updateExerciseNote(session.id, exerciseId, event.target.value)}/></details>
+        {progress ? <div className={`progression-callout ${progress.type === 'increase' ? 'earned' : progress.type}`}><Sparkles size={20}/><p><strong>{progress.title}</strong>{progress.text}</p>{progress.targetWeightKg ? <button type="button" onClick={() => controller.confirmProgression(exerciseId, progress.targetWeightKg!, progress.type as 'increase' | 'decrease')}>Use {progress.targetWeightKg} kg next time</button> : null}</div> : null}
+        <label className="auto-advance-toggle"><input type="checkbox" checked={autoAdvance} onChange={(event) => { setAutoAdvance(event.target.checked); localStorage.setItem('project75:auto-advance-exercise', String(event.target.checked)); }}/><span><strong>Move to the next exercise after effort rating</strong><small>You can always switch from the exercise list.</small></span></label>
         {nextExercise ? <button type="button" className="next-exercise-preview" onClick={() => selectExercise(nextExercise.id)}><span>Next exercise</span><AnatomicalMuscleMap map={nextExercise.muscleMap} size="preview" /><p><strong>{nextExercise.name}</strong><small>{muscleList(nextExercise.muscleMap.primary)}</small></p><ChevronRight size={18} /></button> : <div className="next-exercise-preview final"><Trophy size={20} /><p><strong>Final exercise</strong><small>Review the workout when your working sets are complete.</small></p></div>}
       </section>
     </div>
-    {restSeconds !== null ? <RestTimer initialSeconds={restSeconds} onClose={() => setRestSeconds(null)} /> : null}
+    {restSeconds !== null ? <RestTimer initialSeconds={restSeconds} recommendedSeconds={restPreference} onClose={() => setRestSeconds(null)} onRemember={(seconds) => { controller.setExerciseRestPreference(exerciseId, seconds); setRestSeconds(null); }}/> : null}
     {details ? <ExerciseDetail exercise={details} onClose={() => setDetails(null)} /> : null}
     <Modal open={summaryOpen} onClose={() => setSummaryOpen(false)} title="Workout summary" subtitle="Review the session before saving it to your history." size="large">
       <div className="workout-completion-summary"><div className="completion-hero"><span><Trophy size={28} /></span><div><p className="eyebrow">Ready to save</p><h2>{day.isRestDay ? session.title : displayWorkoutTitle(day)}</h2><p>{recordCount > 0 ? `${recordCount} personal ${recordCount === 1 ? 'record' : 'records'} detected.` : 'No personal records in this workout.'}</p></div></div><div className="completion-metrics"><div><strong>{formatDuration(elapsed)}</strong><span>duration</span></div><div><strong>{workingCompleted}</strong><span>working sets</span></div><div><strong>{Math.round(currentVolume).toLocaleString()}</strong><span>kg volume</span></div><div><strong>{exerciseCompletedCount}/{exerciseOrder.length}</strong><span>exercises complete</span></div></div><div className="completion-comparison"><BarChart3 size={20} /><p><strong>{previousVolume ? currentVolume > previousVolume ? 'Volume increased' : currentVolume === previousVolume ? 'Matched previous volume' : 'Lower volume than the previous session' : 'First comparable session'}</strong>{previousVolume ? `${Math.abs(Math.round(currentVolume - previousVolume)).toLocaleString()} kg ${currentVolume >= previousVolume ? 'above' : 'below'} the previous workout of this type.` : 'Complete another workout of this type to compare volume.'}</p></div><div className="completion-recovery"><HeartPulse size={20} /><p><strong>After this workout</strong>Save the workout, hydrate normally and follow your planned protein target.</p></div><button type="button" className="primary-button full" onClick={() => { controller.finishWorkout(session.id, elapsed); setSummaryOpen(false); onFinished(); }}><Check size={18} /> Finish and save workout</button><button type="button" className="text-button centered" onClick={() => setSummaryOpen(false)}>Return to workout</button></div>

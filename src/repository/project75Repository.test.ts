@@ -37,7 +37,7 @@ describe('Project 75 repository', () => {
     expect((await repository.loadRemote()).revision).toBe(4);
     expect((await repository.saveRemote(data, 4)).revision).toBe(5);
     expect(fetcher.mock.calls[1][0]).toBe('/api/data');
-    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toMatchObject({ baseRevision: 4, data: { version: 10 } });
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toMatchObject({ baseRevision: 4, data: { version: 11 } });
   });
 
   it('surfaces authentication failures instead of pretending synchronization succeeded', async () => {

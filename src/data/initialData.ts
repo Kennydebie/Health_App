@@ -26,7 +26,7 @@ export function createInitialData(): AppData {
     trainingTemplate: 'four-day-upper-lower',
   };
   return {
-    version: 10,
+    version: 11,
     profile,
     foodLog: [],
     nutritionTargetHistory: [nutritionTargetFromProfile(profile, today, detectedTimezone())],
@@ -35,6 +35,7 @@ export function createInitialData(): AppData {
     favorites: [],
     recentFoodIds: [],
     savedMeals: [],
+    foodLibrary: [],
     measurements: [],
     bodyGoals: structuredClone(DEFAULT_BODY_GOALS),
     weightLossPlans: [],
@@ -46,5 +47,6 @@ export function createInitialData(): AppData {
     weeklyCardioTarget: 105,
     squatProgression: { currentLevel: 'assisted-squat', stableSessions: 0, updatedAt: now },
     progressionPlans: [],
+    exerciseRestPreferences: {},
   };
 }
