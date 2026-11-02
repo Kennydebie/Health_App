@@ -78,6 +78,8 @@ interface ScoreState {
   usedIngredients: Set<string>;
   /** Main protein sources already on the current day (eggs, meat, fish). */
   dayProteins: Set<string>;
+  /** Non-staple ingredients already used on the current day. */
+  dayIngredients: Set<string>;
   random: () => number;
 }
 
@@ -89,7 +91,9 @@ export function proteinSources(recipe: Recipe, lookup: IngredientLookup) {
 
 function scoreRecipe(recipe: Recipe, slot: MealSlot, context: PlannerContext, state: ScoreState) {
   const ingredientsInRecipe = recipeIngredientIds(recipe, context.lookup);
-  const reused = ingredientsInRecipe.filter((id) => state.usedIngredients.has(id)).length;
+  // Reuse across days lowers waste; repeating the same ingredients within one day feels monotonous.
+  const reused = ingredientsInRecipe.filter((id) => state.usedIngredients.has(id) && !state.dayIngredients.has(id)).length;
+  const sameDayOverlap = ingredientsInRecipe.filter((id) => state.dayIngredients.has(id)).length;
   const fresh = ingredientsInRecipe.length - reused;
   const pantryHits = ingredientsInRecipe.filter((id) => context.pantryIngredientIds?.includes(id)).length;
   const used = state.usedRecipeCounts.get(recipe.id) ?? 0;
@@ -99,6 +103,7 @@ function scoreRecipe(recipe: Recipe, slot: MealSlot, context: PlannerContext, st
   const sameDayProtein = proteinSources(recipe, context.lookup).filter((id) => state.dayProteins.has(id)).length;
   return state.random() * 0.35
     - sameDayProtein * 0.45
+    - sameDayOverlap * 0.3
     + (context.favoriteRecipeIds?.includes(recipe.id) ? 0.35 : 0)
     + Math.min(reused, 4) * 0.22
     - fresh * 0.08
@@ -121,6 +126,7 @@ function registerRecipe(recipe: Recipe, context: PlannerContext, state: ScoreSta
   state.usedRecipeCounts.set(recipe.id, (state.usedRecipeCounts.get(recipe.id) ?? 0) + 1);
   for (const id of recipeIngredientIds(recipe, context.lookup)) state.usedIngredients.add(id);
   for (const id of proteinSources(recipe, context.lookup)) state.dayProteins.add(id);
+  for (const id of recipeIngredientIds(recipe, context.lookup)) state.dayIngredients.add(id);
 }
 
 function newMeal(date: string, slot: MealSlot, recipeId: string, order: number, extra: Partial<PlannedMeal> = {}): PlannedMeal {
@@ -213,7 +219,7 @@ export interface GeneratePlanInput {
 
 export function generateMealPlan(input: GeneratePlanInput, context: PlannerContext): MealPlan {
   const random = seededRandom(input.seed);
-  const state: ScoreState = { usedRecipeCounts: new Map(), usedIngredients: new Set(), dayProteins: new Set(), random };
+  const state: ScoreState = { usedRecipeCounts: new Map(), usedIngredients: new Set(), dayProteins: new Set(), dayIngredients: new Set(), random };
   const recipes = new Map(context.recipes.map((recipe) => [recipe.id, recipe]));
   const keep = input.keepMeals ?? [];
   for (const meal of keep) {
@@ -226,10 +232,14 @@ export function generateMealPlan(input: GeneratePlanInput, context: PlannerConte
   for (let day = 0; day < input.days; day += 1) {
     const date = addDays(input.startDate, day);
     state.dayProteins = new Set();
+    state.dayIngredients = new Set();
     const dayMeals: PlannedMeal[] = keep.filter((meal) => meal.date === date && meal.slot !== 'snack');
     for (const meal of dayMeals) {
       const recipe = recipes.get(meal.recipeId);
-      if (recipe) for (const id of proteinSources(recipe, context.lookup)) state.dayProteins.add(id);
+      if (recipe) {
+        for (const id of proteinSources(recipe, context.lookup)) state.dayProteins.add(id);
+        for (const id of recipeIngredientIds(recipe, context.lookup)) state.dayIngredients.add(id);
+      }
     }
     for (const slot of MAIN_SLOTS) {
       if (dayMeals.some((meal) => meal.slot === slot)) continue;
@@ -269,7 +279,7 @@ export function generateMealPlan(input: GeneratePlanInput, context: PlannerConte
 }
 
 function stateFromPlan(plan: MealPlan, context: PlannerContext, seed: number, excludeMealIds: string[] = [], dayDate?: string): ScoreState {
-  const state: ScoreState = { usedRecipeCounts: new Map(), usedIngredients: new Set(), dayProteins: new Set(), random: seededRandom(seed) };
+  const state: ScoreState = { usedRecipeCounts: new Map(), usedIngredients: new Set(), dayProteins: new Set(), dayIngredients: new Set(), random: seededRandom(seed) };
   const recipes = new Map(context.recipes.map((recipe) => [recipe.id, recipe]));
   for (const meal of plan.meals) {
     if (excludeMealIds.includes(meal.id)) continue;
@@ -277,11 +287,14 @@ function stateFromPlan(plan: MealPlan, context: PlannerContext, seed: number, ex
     if (recipe) registerRecipe(recipe, context, state);
   }
   state.dayProteins = new Set();
+  state.dayIngredients = new Set();
   if (dayDate) {
     for (const meal of plan.meals) {
       if (meal.date !== dayDate || excludeMealIds.includes(meal.id)) continue;
       const recipe = recipes.get(meal.recipeId);
-      if (recipe) for (const id of proteinSources(recipe, context.lookup)) state.dayProteins.add(id);
+      if (!recipe) continue;
+      for (const id of proteinSources(recipe, context.lookup)) state.dayProteins.add(id);
+      for (const id of recipeIngredientIds(recipe, context.lookup)) state.dayIngredients.add(id);
     }
   }
   return state;

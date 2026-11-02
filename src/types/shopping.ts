@@ -71,6 +71,8 @@ export interface ShoppingItem {
   wasteRisk: 'none' | 'low' | 'high';
   manual: boolean;
   nutritionVerified: boolean;
+  /** Per-100 label of the chosen Picnic product, when complete. Never set for demo data. */
+  nutritionPer100?: NutrientsPer100 | null;
   note?: string;
   meals: RequirementMealRef[];
 }

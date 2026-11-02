@@ -16,6 +16,7 @@ export function withProject73Fields(data: MaybeProject73): AppData {
   return {
     ...data,
     upgradeNotice: data.upgradeNotice ?? null,
+    verifiedNutrition: data.verifiedNutrition && typeof data.verifiedNutrition === 'object' ? data.verifiedNutrition : {},
     metabolicSettings: { ...defaults.metabolicSettings, ...data.metabolicSettings, overrides: { ...DEFAULT_METABOLIC_SETTINGS.overrides, ...data.metabolicSettings?.overrides }, version: 1 },
     planningPreferences: { ...DEFAULT_PLANNING_PREFERENCES, ...data.planningPreferences, version: 1 },
     mealPlans: Array.isArray(data.mealPlans) ? data.mealPlans : [],

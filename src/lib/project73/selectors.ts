@@ -6,8 +6,13 @@ import { getNutritionTotals } from '../selectors';
 import { recommendTargets, type TargetRecommendation } from './metabolism';
 import { dayTotals, type PlannerContext } from './mealPlanner';
 import { assessProgress, type AdherenceSummary, type CoachAssessment } from './progressCoach';
-import { mealNutrition } from './recipeMath';
+import { mealNutrition, type NutritionOverrides } from './recipeMath';
 import { addDays, dailyWeights, dayIndex, observedRate, smoothedTrend, weeklyAverages, weightProgress, type ObservedRate, type TrendPoint, type WeeklyAverage, type WeightProgress } from './weightTrend';
+
+/** Verified per-100 nutrition from matched products, keyed by ingredient. */
+export function nutritionOverrides(data: Pick<AppData, 'verifiedNutrition'>): NutritionOverrides {
+  return Object.fromEntries(Object.entries(data.verifiedNutrition ?? {}).map(([ingredientId, value]) => [ingredientId, value.per100]));
+}
 
 export function allRecipes(data: Pick<AppData, 'customRecipes'>): Recipe[] {
   return [...builtinRecipes, ...data.customRecipes];
@@ -64,11 +69,12 @@ export function plannerContext(data: AppData, today: string): PlannerContext {
     favoriteRecipeIds: data.favoriteRecipeIds,
     pantryIngredientIds: data.pantry.filter((item) => item.amount > 0).map((item) => item.ingredientId),
     recentRecipeIds: data.mealPlans.filter((plan) => plan.status === 'archived').flatMap((plan) => plan.meals.filter((meal) => meal.date >= recentFrom).map((meal) => meal.recipeId)),
+    overrides: nutritionOverrides(data),
   };
 }
 
 export function plannedDayTotals(data: AppData, date: string) {
-  return dayTotals(mealsOn(data, date), recipeMapFor(data), getIngredient);
+  return dayTotals(mealsOn(data, date), recipeMapFor(data), getIngredient, nutritionOverrides(data));
 }
 
 /** Confirmed intake (food log, including meals marked "Gegeten"). Planned food is never counted here. */
@@ -76,10 +82,10 @@ export function actualDayTotals(data: AppData, date: string) {
   return getNutritionTotals(data, date);
 }
 
-export function mealDetails(data: Pick<AppData, 'customRecipes'>, meal: Pick<PlannedMeal, 'recipeId' | 'servings'>) {
+export function mealDetails(data: Pick<AppData, 'customRecipes' | 'verifiedNutrition'>, meal: Pick<PlannedMeal, 'recipeId' | 'servings'>) {
   const recipe = recipeMapFor(data).get(meal.recipeId);
   if (!recipe) return null;
-  return { recipe, nutrition: mealNutrition(recipe, meal.servings, getIngredient) };
+  return { recipe, nutrition: mealNutrition(recipe, meal.servings, getIngredient, nutritionOverrides(data)) };
 }
 
 export function plannedDaysAhead(data: AppData, today: string) {
@@ -107,7 +113,9 @@ export function weightOverview(data: AppData, today: string): WeightOverview {
   const rate28 = observedRate(trend, 28, today);
   let forecastDate: string | null = null;
   let forecastBasis: WeightOverview['forecastBasis'] = 'none';
-  if (progress.remainingKg <= 0 && progress.currentKg != null) {
+  if (progress.currentKg == null) {
+    forecastBasis = 'none';
+  } else if (progress.remainingKg <= 0) {
     forecastDate = today;
     forecastBasis = 'observed';
   } else if (rate28?.reliable && rate28.kgPerWeek > 0.05) {

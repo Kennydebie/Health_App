@@ -8,7 +8,7 @@ export const DEFAULT_PLANNING_PREFERENCES: PlanningPreferences = {
   household: 1,
   snacksPerDay: 2,
   allowLeftovers: true,
-  weeklyGroceryBudgetEur: 60,
+  weeklyGroceryBudgetEur: 70,
   preferredFoods: ['Eieren', 'Kip', 'Zalm', 'Mager rundergehakt', 'Skyr en magere kwark', 'Havermout', 'Rijst en pasta', 'Volkoren wraps', 'Broccoli en bimi', 'Groente en fruit', 'Hummus en tzatziki', 'Oven- en airfryermaaltijden'],
   allergens: [],
   dietaryRestrictions: [],
@@ -24,6 +24,7 @@ export const DEFAULT_PLANNING_PREFERENCES: PlanningPreferences = {
 export function createProject73Defaults(now = new Date().toISOString()): Project73Data {
   return {
     upgradeNotice: null,
+    verifiedNutrition: {},
     metabolicSettings: { ...structuredClone(DEFAULT_METABOLIC_SETTINGS), updatedAt: now },
     planningPreferences: structuredClone(DEFAULT_PLANNING_PREFERENCES),
     mealPlans: [],

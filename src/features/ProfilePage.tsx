@@ -7,7 +7,7 @@ import type { AppController } from '../state/useAppData';
 import type { UserProfile } from '../types/models';
 import { DataBackups } from './DataBackups';
 
-interface ProfilePageProps { controller: AppController; onDirtyChange?: (dirty: boolean) => void; }
+interface ProfilePageProps { controller: AppController; onDirtyChange?: (dirty: boolean) => void; /** 'training' renders only schedule, equipment and backups (Project 73 settings own body and targets). */ mode?: 'full' | 'training'; }
 
 const equipmentOptions = ['Adjustable dumbbells', 'Barbell', 'Bench', 'Dip setup', 'Bodyweight'];
 const dayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -22,7 +22,7 @@ function recommendedTargets(profile: UserProfile, weightKg: number) {
   return { calories, protein, fat, carbs };
 }
 
-export function ProfilePage({ controller, onDirtyChange }: ProfilePageProps) {
+export function ProfilePage({ controller, onDirtyChange, mode = 'full' }: ProfilePageProps) {
   const [draft, setDraft] = useState<UserProfile>(() => structuredClone(controller.data.profile));
   const [saved, setSaved] = useState(false);
   const [recommendOpen, setRecommendOpen] = useState(false);
@@ -49,7 +49,7 @@ export function ProfilePage({ controller, onDirtyChange }: ProfilePageProps) {
 
     <section className="settings-layout">
       <div className="settings-main">
-        <article className="card settings-section"><header><span className="metric-icon blue"><UserRound size={19} /></span><div><h2>Body & goal</h2></div></header><div className="settings-grid">
+        {mode === 'full' ? <><article className="card settings-section"><header><span className="metric-icon blue"><UserRound size={19} /></span><div><h2>Body & goal</h2></div></header><div className="settings-grid">
           <label className="wide">Name<input type="text" value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></label>
           <label>Age<input type="number" min="18" max="100" value={draft.age} onChange={(event) => setNumber('age', Number(event.target.value))} /></label>
           <label>Biological sex<select value={draft.sex} onChange={(event) => setDraft((current) => ({ ...current, sex: event.target.value as UserProfile['sex'] }))}><option value="male">Male</option><option value="female">Female</option></select></label>
@@ -66,13 +66,13 @@ export function ProfilePage({ controller, onDirtyChange }: ProfilePageProps) {
           <label><span>Protein</span><div><input type="number" min="20" max="400" value={draft.proteinTarget} onChange={(event) => setNumber('proteinTarget', Number(event.target.value))} /><small>g</small></div></label>
           <label><span>Carbohydrates</span><div><input type="number" min="0" max="800" value={draft.carbTarget} onChange={(event) => setNumber('carbTarget', Number(event.target.value))} /><small>g</small></div></label>
           <label><span>Fat</span><div><input type="number" min="20" max="300" value={draft.fatTarget} onChange={(event) => setNumber('fatTarget', Number(event.target.value))} /><small>g</small></div></label>
-        </div><p className="settings-note"><ShieldCheck size={16} /> Protein is set high to support lean mass during a calorie deficit. Change any target manually at any time.</p></article>
+        </div><p className="settings-note"><ShieldCheck size={16} /> Protein is set high to support lean mass during a calorie deficit. Change any target manually at any time.</p></article></> : null}
 
         <article className="card settings-section"><header><span className="metric-icon orange"><Dumbbell size={19} /></span><div><h2>Schedule & equipment</h2></div></header><div className="choice-section"><span>Preferred training days</span><div className="choice-chips">{dayOptions.map((day) => <button type="button" key={day} className={draft.trainingDays.includes(day) ? 'active' : ''} onClick={() => setDraft((current) => ({ ...current, trainingDays: current.trainingDays.includes(day) ? current.trainingDays.filter((item) => item !== day) : [...current.trainingDays, day] }))}>{draft.trainingDays.includes(day) ? <Check size={14} /> : null}{day.slice(0, 3)}</button>)}</div></div><div className="choice-section"><span>Available equipment</span><div className="equipment-list">{equipmentOptions.map((item) => <button type="button" key={item} className={draft.equipment.includes(item) ? 'active' : ''} onClick={() => setDraft((current) => ({ ...current, equipment: current.equipment.includes(item) ? current.equipment.filter((value) => value !== item) : [...current.equipment, item] }))}><i>{draft.equipment.includes(item) ? <Check size={15} /> : null}</i>{item}</button>)}</div></div></article>
         <DataBackups controller={controller} />
       </div>
 
-      <aside className="settings-aside"><article className="profile-summary"><div className="profile-avatar">{draft.name.charAt(0).toUpperCase()}</div><p className="eyebrow">Your goal</p><h2>{draft.goalWeightKg} kg while maintaining muscle</h2><div><span><strong>{canonicalCurrent == null ? '—' : canonicalCurrent.toFixed(1)}</strong> kg now</span><ChevronRight size={18} /><span><strong>{draft.goalWeightKg}</strong> kg goal</span></div><section className="profile-plan-status"><span><Target size={15} /><strong>Week {planWeek}</strong><small>current week</small></span><span><Dumbbell size={15} /><strong>{trainingStreak}</strong><small>week streak</small></span><span><Activity size={15} /><strong>{consistency.percent}%</strong><small>{consistency.completed} of {consistency.due} due goals</small></span></section></article><article className="card data-card"><ShieldCheck size={20} /><h3>Private health data</h3><p>Signed-in synchronization uses account-owned records. A device copy remains available for offline use and recovery.</p></article></aside>
+      {mode === 'full' ? <aside className="settings-aside"><article className="profile-summary"><div className="profile-avatar">{draft.name.charAt(0).toUpperCase()}</div><p className="eyebrow">Your goal</p><h2>{draft.goalWeightKg} kg while maintaining muscle</h2><div><span><strong>{canonicalCurrent == null ? '—' : canonicalCurrent.toFixed(1)}</strong> kg now</span><ChevronRight size={18} /><span><strong>{draft.goalWeightKg}</strong> kg goal</span></div><section className="profile-plan-status"><span><Target size={15} /><strong>Week {planWeek}</strong><small>current week</small></span><span><Dumbbell size={15} /><strong>{trainingStreak}</strong><small>week streak</small></span><span><Activity size={15} /><strong>{consistency.percent}%</strong><small>{consistency.completed} of {consistency.due} due goals</small></span></section></article><article className="card data-card"><ShieldCheck size={20} /><h3>Private health data</h3><p>Signed-in synchronization uses account-owned records. A device copy remains available for offline use and recovery.</p></article></aside> : null}
     </section>
 
     <Modal open={recommendOpen} onClose={() => setRecommendOpen(false)} title="Recommended starting targets" subtitle="Review the estimate before applying it.">

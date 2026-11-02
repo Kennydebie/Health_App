@@ -1,40 +1,119 @@
-import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Dumbbell, Scale, Sparkles, Target, Utensils } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ArrowLeft, ArrowRight, Check, ChefHat, Scale, Sparkles, Target } from 'lucide-react';
 import { toDateKey } from '../lib/date';
 import type { AppController } from '../state/useAppData';
+import { ACTIVITY_LEVELS, recommendTargets } from '../lib/project73/metabolism';
+import { createPlan, recalculateTargets, updateMetabolicSettings, updatePlanningPreferences } from '../lib/project73/actions';
+import type { Allergen } from '../types/project73';
+import { longDate, nlNumber } from '../lib/project73/format';
 
 interface OnboardingFlowProps { controller: AppController }
 
 const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const weekdayLabels: Record<string, string> = { Monday: 'ma', Tuesday: 'di', Wednesday: 'wo', Thursday: 'do', Friday: 'vr', Saturday: 'za', Sunday: 'zo' };
+const ALLERGENS: Array<[Allergen, string]> = [['gluten', 'Gluten'], ['melk', 'Melk'], ['lactose', 'Lactose'], ['ei', 'Ei'], ['vis', 'Vis'], ['pinda', "Pinda's"], ['noten', 'Noten'], ['soja', 'Soja'], ['sesam', 'Sesam']];
 
+const parse = (value: string) => Number(value.replace(',', '.'));
+
+/** Dutch first-run setup for Project 73, prefilled with the agreed starting profile. Everything stays editable later. */
 export function OnboardingFlow({ controller }: OnboardingFlowProps) {
   const { data } = controller;
+  const today = toDateKey();
   const [step, setStep] = useState(0);
   const [name, setName] = useState(data.profile.name);
-  const [weight, setWeight] = useState('');
-  const [goal, setGoal] = useState(String(data.profile.goalWeightKg));
-  const [calories, setCalories] = useState(String(data.profile.calorieTarget));
-  const [protein, setProtein] = useState(String(data.profile.proteinTarget));
+  const [weight, setWeight] = useState('85,5');
+  const [goal, setGoal] = useState(String(data.profile.goalWeightKg).replace('.', ','));
+  const [age, setAge] = useState(String(data.profile.age));
+  const [height, setHeight] = useState(String(data.profile.heightCm));
+  const [sex, setSex] = useState(data.profile.sex);
+  const [months, setMonths] = useState(String(data.metabolicSettings.timeframeMonths));
+  const [activity, setActivity] = useState(data.metabolicSettings.activityFactor);
   const [trainingDays, setTrainingDays] = useState(data.profile.trainingDays.length ? data.profile.trainingDays : ['Monday', 'Wednesday', 'Friday']);
-  const [stepGoal, setStepGoal] = useState(String(data.coachingSettings.dailyStepGoal));
+  const [allergens, setAllergens] = useState<Allergen[]>(data.planningPreferences.allergens);
+  const [planNow, setPlanNow] = useState(true);
+
+  const basics = { weightKg: parse(weight), goalWeightKg: parse(goal), age: parse(age), heightCm: parse(height) };
+  const validBasics = name.trim().length > 0 && basics.weightKg >= 30 && basics.weightKg <= 300 && basics.goalWeightKg >= 40 && basics.goalWeightKg <= 200 && basics.age >= 18 && basics.age <= 100 && basics.heightCm >= 120 && basics.heightCm <= 230;
+  const recommendation = useMemo(() => validBasics ? recommendTargets({ sex, age: basics.age, heightCm: basics.heightCm, weightKg: basics.weightKg, goalWeightKg: basics.goalWeightKg }, { ...data.metabolicSettings, activityFactor: activity, timeframeMonths: parse(months) || 12 }, today) : null, [validBasics, sex, basics.age, basics.heightCm, basics.weightKg, basics.goalWeightKg, data.metabolicSettings, activity, months, today]);
   if (data.onboardingCompleted) return null;
 
-  const validBasics = name.trim().length > 0 && Number(weight) >= 30 && Number(weight) <= 300 && Number(goal) >= 40 && Number(goal) <= 200;
-  const validTargets = Number(calories) >= 1200 && Number(calories) <= 6000 && Number(protein) >= 40 && Number(protein) <= 400;
-  const validTraining = trainingDays.length >= 2 && trainingDays.length <= 5 && Number(stepGoal) >= 1000 && Number(stepGoal) <= 30000;
   const complete = () => {
-    const profile = { ...data.profile, name: name.trim(), goalWeightKg: Number(goal), calorieTarget: Number(calories), proteinTarget: Number(protein), trainingDays };
-    controller.saveWeight(toDateKey(), Number(weight));
-    controller.completeOnboarding(profile, { ...data.coachingSettings, dailyStepGoal: Number(stepGoal) }, Number(weight));
+    if (!recommendation) return;
+    const profile = { ...data.profile, name: name.trim(), age: basics.age, heightCm: basics.heightCm, sex, goalWeightKg: basics.goalWeightKg, trainingDays };
+    controller.saveWeight(today, Math.round(basics.weightKg * 10) / 10);
+    controller.completeOnboarding(profile, data.coachingSettings, basics.weightKg);
+    controller.apply(updateMetabolicSettings({ activityFactor: activity, timeframeMonths: parse(months) || 12, previousGoalWeightKg: data.metabolicSettings.previousGoalWeightKg }, today));
+    controller.apply(updatePlanningPreferences({ allergens }));
+    controller.apply(recalculateTargets(today));
+    if (planNow) controller.apply(createPlan(today, data.planningPreferences.horizonDays, today));
   };
 
-  return <div className="onboarding-backdrop" role="presentation"><section className="onboarding-shell" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-    <header><span className="brand-mark"><Sparkles size={18} /></span><div><p className="eyebrow">Project 75 setup</p><strong>Step {step + 1} of 3</strong></div><div className="onboarding-progress"><i style={{ width: `${(step + 1) / 3 * 100}%` }} /></div></header>
-    <main>
-      {step === 0 ? <div className="onboarding-step"><Scale size={31} /><p className="eyebrow">Starting point</p><h1 id="onboarding-title">Build the plan around real data</h1><p>Project 75 uses weight trends—not one-off scale readings—and protects strength while you move toward your target range.</p><div className="onboarding-grid"><label>Name<input autoFocus value={name} onChange={(event) => setName(event.target.value)} maxLength={100} /></label><label>Current weight<span className="unit-input"><input type="number" min="30" max="300" step="0.1" value={weight} onChange={(event) => setWeight(event.target.value)} /><span>kg</span></span></label><label>Target weight<span className="unit-input"><input type="number" min="40" max="200" step="0.1" value={goal} onChange={(event) => setGoal(event.target.value)} /><span>kg</span></span></label></div></div> : null}
-      {step === 1 ? <div className="onboarding-step"><Utensils size={31} /><p className="eyebrow">Nutrition baseline</p><h1 id="onboarding-title">Set targets you can actually test</h1><p>The coach will hold these steady until your logged food, weekly weight averages, and recovery signals justify one small change.</p><div className="onboarding-grid"><label>Daily calories<span className="unit-input"><input autoFocus type="number" min="1200" max="6000" step="10" value={calories} onChange={(event) => setCalories(event.target.value)} /><span>kcal</span></span></label><label>Daily protein<span className="unit-input"><input type="number" min="40" max="400" step="1" value={protein} onChange={(event) => setProtein(event.target.value)} /><span>g</span></span></label></div><div className="onboarding-principle"><Target size={17} /><span>Planned and fully logged days are separated, so incomplete food records never trigger an automatic calorie cut.</span></div></div> : null}
-      {step === 2 ? <div className="onboarding-step"><Dumbbell size={31} /><p className="eyebrow">Strength and activity</p><h1 id="onboarding-title">Choose a sustainable weekly rhythm</h1><p>Three full-body sessions are the default. Pick two to five realistic days; missed sessions can be moved, shortened, or skipped without breaking the plan.</p><fieldset><legend>Training days</legend><div className="onboarding-days">{weekdays.map((day) => <button type="button" key={day} className={trainingDays.includes(day) ? 'selected' : ''} onClick={() => setTrainingDays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])}><span>{day.slice(0, 3)}</span>{trainingDays.includes(day) ? <Check size={15} /> : null}</button>)}</div></fieldset><label className="step-goal">Daily step goal<span className="unit-input"><input type="number" min="1000" max="30000" step="500" value={stepGoal} onChange={(event) => setStepGoal(event.target.value)} /><span>steps</span></span></label></div> : null}
-    </main>
-    <footer>{step > 0 ? <button type="button" className="secondary-button" onClick={() => setStep((value) => value - 1)}><ArrowLeft size={17} /> Back</button> : <span />}{step < 2 ? <button type="button" className="primary-button" disabled={step === 0 ? !validBasics : !validTargets} onClick={() => setStep((value) => value + 1)}>Continue <ArrowRight size={17} /></button> : <button type="button" className="primary-button" disabled={!validTraining} onClick={complete}><Check size={17} /> Start Project 75</button>}</footer>
-  </section></div>;
+  const steps = ['Startpunt', 'Doel en tempo', 'Voorkeuren'];
+  return (
+    <div className="modal-backdrop" role="presentation" style={{ zIndex: 200 }}>
+      <section className="p73-card p73" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" style={{ width: 'min(680px, calc(100vw - 24px))', maxHeight: 'calc(100dvh - 24px)', overflowY: 'auto', margin: 'auto', gap: 16, pointerEvents: 'auto' }}>
+        <header className="p73-row between">
+          <div className="p73-row"><span className="brand-mark"><Sparkles size={18} /></span><div><p className="p73-kicker" style={{ margin: 0 }}>Project 73</p><strong>Stap {step + 1} van 3 · {steps[step]}</strong></div></div>
+        </header>
+        <div className="journey__track" aria-hidden="true"><div className="journey__fill" style={{ width: `${((step + 1) / 3) * 100}%` }} /></div>
+
+        {step === 0 ? (
+          <div className="p73-stack">
+            <Scale size={28} color="var(--accent)" />
+            <h1 id="onboarding-title" style={{ margin: 0, fontSize: 28 }}>Waar begin je?</h1>
+            <p className="muted" style={{ margin: 0 }}>Vooraf ingevuld met je gegevens. Pas aan wat niet klopt; alles blijft later te wijzigen.</p>
+            <div className="p73-fields">
+              <label className="p73-field">Naam<input value={name} onChange={(event) => setName(event.target.value)} /></label>
+              <label className="p73-field">Huidig gewicht (kg)<input inputMode="decimal" value={weight} onChange={(event) => setWeight(event.target.value)} /></label>
+              <label className="p73-field">Streefgewicht (kg)<input inputMode="decimal" value={goal} onChange={(event) => setGoal(event.target.value)} /></label>
+              <label className="p73-field">Lengte (cm)<input inputMode="numeric" value={height} onChange={(event) => setHeight(event.target.value)} /></label>
+              <label className="p73-field">Leeftijd<input inputMode="numeric" value={age} onChange={(event) => setAge(event.target.value)} /></label>
+              <label className="p73-field">Geslacht (voor berekening)<select value={sex} onChange={(event) => setSex(event.target.value as 'male' | 'female')}><option value="male">Man</option><option value="female">Vrouw</option></select></label>
+            </div>
+          </div>
+        ) : null}
+
+        {step === 1 && recommendation ? (
+          <div className="p73-stack">
+            <Target size={28} color="var(--accent)" />
+            <h1 id="onboarding-title" style={{ margin: 0, fontSize: 28 }}>Je doel en tempo</h1>
+            <div className="p73-fields">
+              <label className="p73-field">Termijn (maanden)<input inputMode="numeric" value={months} onChange={(event) => setMonths(event.target.value)} /></label>
+              <label className="p73-field wide">Activiteit<select value={activity} onChange={(event) => setActivity(Number(event.target.value))}>{ACTIVITY_LEVELS.map((level) => <option key={level.factor} value={level.factor}>{level.label} — {level.detail}</option>)}</select></label>
+            </div>
+            <div className="stat-row">
+              <div className="stat"><small>Dagdoel</small><strong>{nlNumber(recommendation.suggested.kcal)} kcal</strong><em>onderhoud ±{nlNumber(recommendation.tdee)} kcal</em></div>
+              <div className="stat"><small>Eiwit</small><strong>{recommendation.suggested.protein} g</strong><em>om spiermassa te behouden</em></div>
+              <div className="stat"><small>Verwacht tempo</small><strong>{nlNumber(recommendation.expectedKgPerWeek, 2)} kg/wk</strong><em>{recommendation.forecasts.target.date ? `doel rond ${longDate(recommendation.forecasts.target.date)}` : ''}</em></div>
+            </div>
+            {recommendation.warnings.filter((warning) => warning.code === 'slow_timeframe' || warning.severity === 'warning').map((warning) => <div key={warning.code} className={`notice ${warning.severity === 'warning' ? 'warn' : 'info'}`}><div><strong>{warning.message}</strong></div></div>)}
+            <p className="muted small" style={{ margin: 0 }}>Berekend met de Mifflin-St Jeor-formule. Het blijft een schatting: na een paar weken wegen stuurt de app bij op basis van je echte trend.</p>
+          </div>
+        ) : null}
+
+        {step === 2 ? (
+          <div className="p73-stack">
+            <ChefHat size={28} color="var(--accent)" />
+            <h1 id="onboarding-title" style={{ margin: 0, fontSize: 28 }}>Wat moet de app weten?</h1>
+            <div>
+              <h3 style={{ margin: '0 0 8px' }}>Allergenen <span className="muted small">(niets aangevinkt = geen)</span></h3>
+              <div className="chip-set">{ALLERGENS.map(([key, label]) => <button key={key} type="button" className={`chip-toggle${allergens.includes(key) ? ' on' : ''}`} aria-pressed={allergens.includes(key)} onClick={() => setAllergens((current) => current.includes(key) ? current.filter((item) => item !== key) : [...current, key])}>{label}</button>)}</div>
+            </div>
+            <div>
+              <h3 style={{ margin: '0 0 8px' }}>Trainingsdagen <span className="muted small">(thuis, 2–3 keer per week)</span></h3>
+              <div className="chip-set">{weekdays.map((day) => <button key={day} type="button" className={`chip-toggle${trainingDays.includes(day) ? ' on' : ''}`} aria-pressed={trainingDays.includes(day)} onClick={() => setTrainingDays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])}>{weekdayLabels[day]}</button>)}</div>
+            </div>
+            <label className="switch"><span>Plan meteen mijn eerste {data.planningPreferences.horizonDays} dagen<p>Simpele maaltijden van maximaal {data.planningPreferences.maxPrepMinutes} minuten, met restjes voor de lunch.</p></span><input type="checkbox" checked={planNow} onChange={(event) => setPlanNow(event.target.checked)} /></label>
+          </div>
+        ) : null}
+
+        <footer className="p73-row between">
+          {step > 0 ? <button type="button" className="p73-btn secondary" onClick={() => setStep((value) => value - 1)}><ArrowLeft size={16} />Terug</button> : <span />}
+          {step < 2
+            ? <button type="button" className="p73-btn primary" disabled={!validBasics} onClick={() => setStep((value) => value + 1)}>Verder<ArrowRight size={16} /></button>
+            : <button type="button" className="p73-btn primary" disabled={!validBasics || trainingDays.length < 1} onClick={complete}><Check size={16} />Start Project 73</button>}
+        </footer>
+      </section>
+    </div>
+  );
 }

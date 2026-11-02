@@ -246,7 +246,8 @@ async function itemForRequirement(env: Project73Env, userId: string, adapter: Pi
     const details: ProductDetails | null = await cachedDetails(env, userId, adapter, productId).catch(() => null);
     const conflicts = conflictingAllergens(details, options.allergens);
     if (!conflicts.length) {
-      return { ...item, nutritionVerified: Boolean(details?.nutritionPer100 && details.source === 'picnic'), note: details ? item.note : 'Etiket kon niet worden gecontroleerd.' };
+      const verified = details?.source === 'picnic' ? details.nutritionPer100 : null;
+      return { ...item, nutritionVerified: Boolean(verified), nutritionPer100: verified, note: details ? item.note : 'Etiket kon niet worden gecontroleerd.' };
     }
     rejected.add(productId);
     item = buildShoppingItem({ ...base, candidates: candidates.filter((candidate) => !rejected.has(candidate.productId)) });

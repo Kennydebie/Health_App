@@ -199,8 +199,17 @@ export interface UpgradeNotice {
   dismissed: boolean;
 }
 
+export interface VerifiedNutrition {
+  per100: NutrientsPer100;
+  productName: string;
+  productId: string;
+  retrievedAt: string;
+}
+
 export interface Project73Data {
   upgradeNotice: UpgradeNotice | null;
+  /** Nutrition labels of matched Picnic products, per ingredient. Replaces reference estimates. */
+  verifiedNutrition: Record<string, VerifiedNutrition>;
   metabolicSettings: MetabolicSettings;
   planningPreferences: PlanningPreferences;
   mealPlans: MealPlan[];

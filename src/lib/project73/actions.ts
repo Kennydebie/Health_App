@@ -1,7 +1,7 @@
 import { getIngredient } from '../../data/project73/ingredients';
 import type { AppData, FoodLogEntry, MealType, UserProfile } from '../../types/models';
 import type { MealPlan, MealSlot, MetabolicSettings, PantryItem, PlannedMeal, PlanningPreferences, Recipe, ShoppingStatusSummary } from '../../types/project73';
-import type { ShoppingItem } from '../../types/shopping';
+import type { ShoppingItem, ShoppingPlan } from '../../types/shopping';
 import { detectedTimezone, nutritionTargetFromProfile, upsertTargetSnapshot } from '../nutritionEvaluation';
 import { generateMealPlan, regenerateDay, replaceMeal, updateMeal } from './mealPlanner';
 import { scaleTotals } from './recipeMath';
@@ -222,7 +222,7 @@ export function reuseRecipe(recipeId: string, date: string, slot: MealSlot, toda
   return (data) => {
     const plan = data.mealPlans.find((item) => item.status === 'active' && item.meals.some((meal) => meal.date === date));
     if (!plan) return data;
-    const existing = plan.meals.find((meal) => meal.date === date && meal.slot === slot && meal.status === 'planned');
+    const existing = slot === 'snack' ? undefined : plan.meals.find((meal) => meal.date === date && meal.slot === slot && meal.status === 'planned');
     if (existing) return replacePlannedMeal(existing.id, today, recipeId)(data);
     const meal: PlannedMeal = { id: `meal_${Date.now().toString(36)}`, date, slot, order: slot === 'snack' ? 4 : ['breakfast', 'lunch', 'dinner'].indexOf(slot), recipeId, servings: 1, locked: false, status: 'planned', updatedAt: nowIso() };
     return withPlan(data, { ...plan, updatedAt: nowIso(), meals: [...plan.meals, meal] });
@@ -248,6 +248,19 @@ export function addSurplusToPantry(items: ShoppingItem[]): Transform {
     const existing = current.pantry.find((entry) => entry.ingredientId === item.ingredientId)?.amount ?? 0;
     return upsertPantryItem(item.ingredientId, Math.round(existing + item.surplusAmount), ingredient.unit)(current);
   }, data);
+}
+
+/** Stores complete Picnic nutrition labels so planning and logging use verified values. */
+export function recordVerifiedNutrition(plan: ShoppingPlan): Transform {
+  return (data) => {
+    if (plan.source !== 'picnic') return data;
+    const next = { ...data.verifiedNutrition };
+    for (const item of plan.items) {
+      const product = item.lines[0]?.product;
+      if (item.nutritionPer100 && product) next[item.ingredientId] = { per100: item.nutritionPer100, productId: product.productId, productName: product.name, retrievedAt: plan.createdAt };
+    }
+    return { ...data, verifiedNutrition: next };
+  };
 }
 
 export function setShoppingStatus(status: ShoppingStatusSummary | null): Transform {

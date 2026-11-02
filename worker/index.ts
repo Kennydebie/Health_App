@@ -4,7 +4,7 @@ import type { BodyMeasurementConfidence, BodyMeasurementValues } from '../src/ty
 import { lookupExternalBarcode, searchExternalFoods } from './foodProviders';
 import { PROJECT75_PROGRESS_PHOTOS_SCHEMA, PROJECT75_USER_DATA_SCHEMA } from '../db/schema';
 import { deleteProject73Data, handleProject73, type Project73Env } from './project73/routes';
-import { handleAssistant, type AssistantEnv } from './project73/assistant';
+import { aiProvider, handleAssistant, type AssistantEnv } from './project73/assistant';
 
 interface R2ObjectBody { body: ReadableStream<Uint8Array> }
 interface R2Bucket {
@@ -433,6 +433,7 @@ export default {
     if (photoMatch && request.method === 'DELETE') return deleteProgressPhoto(request, env, photoMatch[1]);
     if (url.pathname.startsWith('/api/progress-photos')) return json({ code: 'not_found' }, 404);
     if (url.pathname === '/api/account' && request.method === 'DELETE') return deleteAccountData(request, env);
+    if (url.pathname === '/api/assistant/status' && request.method === 'GET') return json({ provider: aiProvider(env), model: aiProvider(env) ? env.AI_MODEL ?? null : null });
     if (url.pathname === '/api/assistant' && request.method === 'POST') {
       if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
       return handleAssistant(request, env, authenticatedUserId(request));

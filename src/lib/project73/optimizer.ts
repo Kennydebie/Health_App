@@ -79,7 +79,7 @@ export function suggestSwaps(input: EvaluateInput, goal: 'waste' | 'cost', limit
       const priced = repriceWithKnownProducts(plan, input);
       if (!priced) continue;
       const day = dayTotals(plan.meals.filter((item) => item.date === meal.date), recipes, input.context.lookup, input.context.overrides);
-      if (day.protein < input.context.targets.protein - 15 || Math.abs(day.kcal - input.context.targets.kcal) > input.context.targets.kcal * 0.08) continue;
+      if (day.protein < input.context.targets.protein - 15 || Math.abs(day.kcal - input.context.targets.kcal) > input.context.targets.kcal * 0.06) continue;
       const costDeltaCents = priced.totals.costCents - baseline.totals.costCents;
       const wasteDeltaCents = perishableSurplusCents(priced.items) - baselineWaste;
       if (goal === 'waste' && !(wasteDeltaCents < -25 && costDeltaCents <= 75)) continue;
