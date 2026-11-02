@@ -52,11 +52,11 @@ export function foodForEntry(data: Pick<AppData, 'foodLibrary'>, entry: FoodLogE
 
 export function foodQualityIssues(food: FoodItem) {
   const issues: string[] = [];
-  if (!food.name.trim()) issues.push('Missing product name');
-  if (!food.servings.length || food.servings.some((serving) => serving.amount <= 0)) issues.push('Missing or invalid serving size');
-  for (const [label, value] of [['Calories', food.calories], ['Protein', food.protein], ['Carbohydrates', food.carbs], ['Fat', food.fat]] as const) {
-    if (value == null) issues.push(`${label} missing`);
-    else if (value < 0) issues.push(`${label} cannot be negative`);
+  if (!food.name.trim()) issues.push('Productnaam ontbreekt');
+  if (!food.servings.length || food.servings.some((serving) => serving.amount <= 0)) issues.push('Portiegrootte ontbreekt of is ongeldig');
+  for (const [label, value] of [['Calorieën', food.calories], ['Eiwit', food.protein], ['Koolhydraten', food.carbs], ['Vet', food.fat]] as const) {
+    if (value == null) issues.push(`${label} ontbreekt`);
+    else if (value < 0) issues.push(`${label} kan niet negatief zijn`);
   }
   if (food.calories != null && food.calories > 950) issues.push('Calories per 100 appear unusually high');
   if ([food.protein, food.carbs, food.fat].some((value) => value != null && value > 100)) issues.push('A macro exceeds 100 g per 100');

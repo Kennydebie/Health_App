@@ -16,7 +16,7 @@ interface DayPlannerProps {
 }
 
 const meals: Array<{ id: MealType; label: string }> = [
-  { id: 'breakfast', label: 'Breakfast' }, { id: 'lunch', label: 'Lunch' }, { id: 'dinner', label: 'Dinner' }, { id: 'snacks', label: 'Snacks' },
+  { id: 'breakfast', label: 'Ontbijt' }, { id: 'lunch', label: 'Lunch' }, { id: 'dinner', label: 'Avondeten' }, { id: 'snacks', label: 'Tussendoor' },
 ];
 
 function plannedMacros(controller: AppController, item: PlannedFoodEntry): Macros {
@@ -26,8 +26,8 @@ function plannedMacros(controller: AppController, item: PlannedFoodEntry): Macro
 
 export function DayPlanner({ controller, date, onDateChange, onSearchFood }: DayPlannerProps) {
   const { data } = controller;
-  const [templateName, setTemplateName] = useState('My usual day');
-  const [reservationTitle, setReservationTitle] = useState('Dinner out');
+  const [templateName, setTemplateName] = useState('Mijn gewone dag');
+  const [reservationTitle, setReservationTitle] = useState('Uit eten');
   const [reservationCalories, setReservationCalories] = useState(600);
   const actual = controller.totalsForDate(date);
   const planned = data.plannedFoodEntries.filter((item) => item.date === date);
@@ -53,38 +53,38 @@ export function DayPlanner({ controller, date, onDateChange, onSearchFood }: Day
 
   return <div className="day-planner">
     <section className="planner-hero card">
-      <div><p className="eyebrow">Plan before hunger decides</p><h2>Plan {prettyDate(date, true)}</h2><p>Projected totals combine what you have logged, what you plan to eat, and any calories reserved for an event.</p></div>
-      <label><CalendarDays size={17} /><input type="date" value={date} onChange={(event) => onDateChange(event.target.value)} aria-label="Choose planning date" /></label>
+      <div><p className="eyebrow">Plan voordat de honger beslist</p><h2>Plan {prettyDate(date, true)}</h2><p>De verwachting telt op wat je gelogd hebt, wat je van plan bent en wat je reserveert voor een etentje.</p></div>
+      <label><CalendarDays size={17} /><input type="date" value={date} onChange={(event) => onDateChange(event.target.value)} aria-label="Kies datum" /></label>
       <div className="planner-kpis">
-        <span><small>Projected calories</small><strong>{Math.round(projectedCalories).toLocaleString()} <em>/ {data.profile.calorieTarget}</em></strong></span>
-        <span><small>Projected protein</small><strong>{Math.round(projectedProtein)} g <em>/ {data.profile.proteinTarget} g</em></strong></span>
-        <span className={projectedCalories > data.profile.calorieTarget ? 'warning' : ''}><small>Flexible budget left</small><strong>{Math.round(remainingCalories)} kcal</strong></span>
+        <span><small>Verwachte calorieën</small><strong>{Math.round(projectedCalories).toLocaleString()} <em>/ {data.profile.calorieTarget}</em></strong></span>
+        <span><small>Verwacht eiwit</small><strong>{Math.round(projectedProtein)} g <em>/ {data.profile.proteinTarget} g</em></strong></span>
+        <span className={projectedCalories > data.profile.calorieTarget ? 'warning' : ''}><small>Ruimte over</small><strong>{Math.round(remainingCalories)} kcal</strong></span>
       </div>
     </section>
 
     <section className="planner-meals">
       {meals.map((meal) => {
         const items = planned.filter((item) => item.meal === meal.id);
-        return <article className="planner-meal card" key={meal.id}><header><div><span>{meal.label}</span><strong>{items.filter((item) => item.status === 'planned').length} planned</strong></div><button type="button" className="icon-button" onClick={() => onSearchFood(meal.id)} aria-label={`Plan ${meal.label.toLowerCase()} food`}><Plus size={17} /></button></header>
+        return <article className="planner-meal card" key={meal.id}><header><div><span>{meal.label}</span><strong>{items.filter((item) => item.status === 'planned').length} planned</strong></div><button type="button" className="icon-button" onClick={() => onSearchFood(meal.id)} aria-label={`Plan ${meal.label.toLowerCase()}`}><Plus size={17} /></button></header>
           <div>{items.length ? items.map((item) => {
             const food = resolveFood(data, item.foodId);
             const macros = plannedMacros(controller, item);
-            return <div className={`planned-food ${item.status}`} key={item.id}><FoodImage src={food?.image ?? ''} alt={food?.name ?? 'Saved food'} /><div><strong>{food?.name ?? 'Saved food'}</strong><span>{Math.round(macros.calories)} kcal · {Math.round(macros.protein)} g protein</span></div><span className="planned-status">{item.status}</span>{item.status === 'planned' ? <button type="button" onClick={() => controller.consumePlannedFood(item.id)} aria-label={`Mark ${food?.name ?? 'food'} eaten`}><Check size={15} /></button> : null}<button type="button" className="danger" onClick={() => controller.deletePlannedFood(item.id)} aria-label={`Remove ${food?.name ?? 'food'} from plan`}><Trash2 size={15} /></button></div>;
+            return <div className={`planned-food ${item.status}`} key={item.id}><FoodImage src={food?.image ?? ''} alt={food?.name ?? 'Saved food'} /><div><strong>{food?.name ?? 'Saved food'}</strong><span>{Math.round(macros.calories)} kcal · {Math.round(macros.protein)} g eiwit</span></div><span className="planned-status">{item.status}</span>{item.status === 'planned' ? <button type="button" onClick={() => controller.consumePlannedFood(item.id)} aria-label={`Markeer ${food?.name ?? 'product'} als gegeten`}><Check size={15} /></button> : null}<button type="button" className="danger" onClick={() => controller.deletePlannedFood(item.id)} aria-label={`Verwijder ${food?.name ?? 'product'} uit plan`}><Trash2 size={15} /></button></div>;
           }) : <button type="button" className="planner-empty-meal" onClick={() => onSearchFood(meal.id)}><CirclePlus size={19} /><span>Plan {meal.label.toLowerCase()}</span></button>}</div>
         </article>;
       })}
     </section>
 
     <section className="what-can-i-eat card">
-      <header><div><p className="eyebrow">What can I eat?</p><h2>Suggestions that fit the gap</h2><p>{Math.round(remainingCalories)} kcal and {Math.round(remainingProtein)} g protein remain after the current plan.</p></div><Lightbulb size={24} /></header>
-      {suggestions.length ? <div className="suggestion-list">{suggestions.map((suggestion) => <article key={suggestion.food.id}><FoodImage src={suggestion.food.image} alt={suggestion.food.name} /><div><strong>{suggestion.food.name}</strong><span>{suggestion.amount} {suggestion.food.unit} · {Math.round(suggestion.macros.calories)} kcal · {Math.round(suggestion.macros.protein)} g protein</span><small>{suggestion.reason}</small></div><button type="button" className="secondary-button" onClick={() => addSuggestion(suggestion.food.id, suggestion.servingId, suggestion.quantity, 'snacks', false)}><Plus size={15} /> Plan</button><button type="button" className="text-button" onClick={() => addSuggestion(suggestion.food.id, suggestion.servingId, suggestion.quantity, 'snacks', true)}>Log now <ArrowRight size={14} /></button></article>)}</div> : <div className="planner-empty-suggestions"><Target size={24} /><strong>No useful suggestion fits this budget</strong><p>Adjust the existing plan or leave the remaining budget unused. The coach will never invent calories to force a match.</p></div>}
+      <header><div><p className="eyebrow">Wat kan ik nog eten?</p><h2>Suggesties die passen</h2><p>{Math.round(remainingCalories)} kcal and {Math.round(remainingProtein)} g eiwit remain after the current plan.</p></div><Lightbulb size={24} /></header>
+      {suggestions.length ? <div className="suggestion-list">{suggestions.map((suggestion) => <article key={suggestion.food.id}><FoodImage src={suggestion.food.image} alt={suggestion.food.name} /><div><strong>{suggestion.food.name}</strong><span>{suggestion.amount} {suggestion.food.unit} · {Math.round(suggestion.macros.calories)} kcal · {Math.round(suggestion.macros.protein)} g eiwit</span><small>{suggestion.reason}</small></div><button type="button" className="secondary-button" onClick={() => addSuggestion(suggestion.food.id, suggestion.servingId, suggestion.quantity, 'snacks', false)}><Plus size={15} /> Plan</button><button type="button" className="text-button" onClick={() => addSuggestion(suggestion.food.id, suggestion.servingId, suggestion.quantity, 'snacks', true)}>Nu loggen <ArrowRight size={14} /></button></article>)}</div> : <div className="planner-empty-suggestions"><Target size={24} /><strong>Geen passende suggestie</strong><p>Pas je plan aan of laat de ruimte over. De coach verzint nooit calorieën om iets passend te maken.</p></div>}
     </section>
 
     <section className="planner-tools-grid">
-      <article className="card planner-tool"><div><Save size={18} /><div><strong>Save this planned day</strong><p>Reuse the food choices and portions later.</p></div></div><label>Template name<input value={templateName} onChange={(event) => setTemplateName(event.target.value)} maxLength={80} /></label><button type="button" className="secondary-button" disabled={!templateName.trim() || !unconsumed.length} onClick={() => controller.saveDayTemplate(templateName, date)}><Save size={15} /> Save template</button>{data.dayTemplates.length ? <div className="planner-template-list">{data.dayTemplates.map((template) => <button type="button" key={template.id} onClick={() => controller.applyDayTemplate(template.id, date)}>{template.name}<span>{template.items.length} items</span></button>)}</div> : null}</article>
-      <article className="card planner-tool"><div><Sparkles size={18} /><div><strong>Reserve event calories</strong><p>Protect flexibility for a restaurant, party, or social meal.</p></div></div><label>Event<input value={reservationTitle} onChange={(event) => setReservationTitle(event.target.value)} maxLength={80} /></label><label>Calories<input type="number" min="0" max="5000" value={reservationCalories} onChange={(event) => setReservationCalories(Number(event.target.value))} /></label><button type="button" className="secondary-button" disabled={!reservationTitle.trim() || reservationCalories <= 0} onClick={() => controller.reserveCalories({ date, title: reservationTitle.trim(), calories: reservationCalories, meal: 'dinner' })}><Target size={15} /> Reserve</button>{reservations.map((item) => <div className="reservation-row" key={item.id}><span>{item.title}<small>{item.calories} kcal</small></span><button type="button" className="danger" onClick={() => controller.deleteCalorieReservation(item.id)} aria-label={`Remove ${item.title}`}><Trash2 size={14} /></button></div>)}</article>
+      <article className="card planner-tool"><div><Save size={18} /><div><strong>Deze dag bewaren</strong><p>Hergebruik deze keuzes en porties later.</p></div></div><label>Naam<input value={templateName} onChange={(event) => setTemplateName(event.target.value)} maxLength={80} /></label><button type="button" className="secondary-button" disabled={!templateName.trim() || !unconsumed.length} onClick={() => controller.saveDayTemplate(templateName, date)}><Save size={15} /> Bewaren</button>{data.dayTemplates.length ? <div className="planner-template-list">{data.dayTemplates.map((template) => <button type="button" key={template.id} onClick={() => controller.applyDayTemplate(template.id, date)}>{template.name}<span>{template.items.length} items</span></button>)}</div> : null}</article>
+      <article className="card planner-tool"><div><Sparkles size={18} /><div><strong>Calorieën reserveren</strong><p>Houd ruimte voor een restaurant, feest of etentje.</p></div></div><label>Event<input value={reservationTitle} onChange={(event) => setReservationTitle(event.target.value)} maxLength={80} /></label><label>Calories<input type="number" min="0" max="5000" value={reservationCalories} onChange={(event) => setReservationCalories(Number(event.target.value))} /></label><button type="button" className="secondary-button" disabled={!reservationTitle.trim() || reservationCalories <= 0} onClick={() => controller.reserveCalories({ date, title: reservationTitle.trim(), calories: reservationCalories, meal: 'dinner' })}><Target size={15} /> Reserve</button>{reservations.map((item) => <div className="reservation-row" key={item.id}><span>{item.title}<small>{item.calories} kcal</small></span><button type="button" className="danger" onClick={() => controller.deleteCalorieReservation(item.id)} aria-label={`Verwijder ${item.title}`}><Trash2 size={14} /></button></div>)}</article>
     </section>
 
-    <section className="planner-copy-row card"><div><Copy size={18} /><span><strong>Reuse tomorrow</strong><small>Copy all planned foods and reservations to {prettyDate(shiftDate(date, 1))}.</small></span></div><button type="button" className="secondary-button" onClick={() => controller.copyPlannedDay(date, shiftDate(date, 1))}><Copy size={15} /> Copy to tomorrow</button></section>
+    <section className="planner-copy-row card"><div><Copy size={18} /><span><strong>Morgen hergebruiken</strong><small>Copy all planned foods and reservations to {prettyDate(shiftDate(date, 1))}.</small></span></div><button type="button" className="secondary-button" onClick={() => controller.copyPlannedDay(date, shiftDate(date, 1))}><Copy size={15} /> Kopieer naar morgen</button></section>
   </div>;
 }

@@ -78,9 +78,13 @@ export function upgradeToProject73(input: MaybeProject73, today: string): AppDat
     : data.activeGoal;
   const hadHistory = data.measurements.length + data.foodLog.length + data.sessions.length > 0;
   if (hadHistory) changes.push('Al je metingen, voedingslogs, trainingen en foto’s zijn behouden.');
+  // Weekday labels in the training program are display-only; show them in Dutch.
+  const dayLabels: Record<string, string> = { Mon: 'ma', Tue: 'di', Wed: 'wo', Thu: 'do', Fri: 'vr', Sat: 'za', Sun: 'zo' };
+  const program = data.program.map((day) => dayLabels[day.label] ? { ...day, label: dayLabels[day.label] } : day);
   return {
     ...data,
     version: PROJECT73_DATA_VERSION,
+    program,
     profile,
     activeGoal,
     metabolicSettings,

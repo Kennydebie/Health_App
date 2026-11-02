@@ -149,7 +149,7 @@ export function MealPlanPage({ controller, shopping, navigate, tab, setTab }: { 
     return (
       <>
         <div className="page" style={{ paddingBottom: 0 }}><div className="subnav" role="tablist"><button type="button" role="tab" aria-selected={false} onClick={() => setTab('plan')}>Plan</button><button type="button" role="tab" aria-selected className="active">Logboek</button></div></div>
-        <Suspense fallback={<PageSkeleton />}><FoodPage controller={controller} /></Suspense>
+        <div className="legacy-scope"><Suspense fallback={<PageSkeleton />}><FoodPage controller={controller} /></Suspense></div>
       </>
     );
   }

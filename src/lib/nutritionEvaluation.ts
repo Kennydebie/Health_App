@@ -117,18 +117,18 @@ export function evaluateNutritionDay(input: {
 }
 
 export function statusLabel(status: NutritionMetricStatus, overall = false) {
-  if (status === 'on_target') return 'On target';
-  if (status === 'close') return 'Close to target';
-  if (status === 'under') return overall ? 'Outside target range' : 'Below target';
-  if (status === 'over') return overall ? 'Outside target range' : 'Above target';
-  if (status === 'in_progress') return 'In progress';
-  return 'No data';
+  if (status === 'on_target') return 'Op doel';
+  if (status === 'close') return 'Bijna op doel';
+  if (status === 'under') return overall ? 'Buiten doelbereik' : 'Onder doel';
+  if (status === 'over') return overall ? 'Buiten doelbereik' : 'Boven doel';
+  if (status === 'in_progress') return 'Bezig';
+  return 'Geen gegevens';
 }
 
 export function metricDifference(value: number, target: number, unit: string) {
   const difference = Math.round(value - target);
-  if (difference === 0) return `At target`;
-  return `${Math.abs(difference).toLocaleString()} ${unit} ${difference > 0 ? 'over' : 'below'} target`;
+  if (difference === 0) return `Op doel`;
+  return `${Math.abs(difference).toLocaleString('nl-NL')} ${unit} ${difference > 0 ? 'boven' : 'onder'} doel`;
 }
 
 export function startOfCalendarWeek(date: string) {
@@ -153,15 +153,14 @@ export function explanationForDay(evaluation: NutritionDayEvaluation) {
   if (evaluation.overall === 'no_data') return ['No food was logged for this day.'];
   if (evaluation.overall === 'in_progress') return ['Today is still in progress. Under-target amounts are not judged until you finish the day.'];
   const metrics: Array<[string, NutritionMetricStatus, number, number, string]> = [
-    ['Calories', evaluation.calories, evaluation.totals.calories, evaluation.target.caloriesKcal, 'kcal'],
-    ['Protein', evaluation.protein, evaluation.totals.protein, evaluation.target.proteinGrams, 'g'],
-    ['Carbohydrates', evaluation.carbohydrates, evaluation.totals.carbs, evaluation.target.carbohydrateGrams, 'g'],
-    ['Fat', evaluation.fat, evaluation.totals.fat, evaluation.target.fatGrams, 'g'],
+    ['Calorieën', evaluation.calories, evaluation.totals.calories, evaluation.target.caloriesKcal, 'kcal'],
+    ['Eiwit', evaluation.protein, evaluation.totals.protein, evaluation.target.proteinGrams, 'g'],
+    ['Koolhydraten', evaluation.carbohydrates, evaluation.totals.carbs, evaluation.target.carbohydrateGrams, 'g'],
+    ['Vet', evaluation.fat, evaluation.totals.fat, evaluation.target.fatGrams, 'g'],
   ];
   return metrics.map(([label, status, value, target, unit]) => {
-    const verb = label === 'Calories' || label === 'Carbohydrates' ? 'were' : 'was';
     return status === 'on_target'
-      ? `${label} ${verb} within range.`
-      : `${label} ${verb} ${metricDifference(value, target, unit).toLowerCase()}.`;
+      ? `${label}: binnen bereik.`
+      : `${label}: ${metricDifference(value, target, unit).toLowerCase()}.`;
   });
 }

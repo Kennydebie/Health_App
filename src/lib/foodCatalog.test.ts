@@ -25,7 +25,7 @@ describe('hybrid food catalog', () => {
   });
 
   it('blocks incomplete foods from silently appearing as zero nutrition', () => {
-    expect(foodQualityIssues(providerFood({ calories: null, protein: null }))).toContain('Calories missing');
-    expect(foodQualityIssues(providerFood({ calories: null, protein: null }))).toContain('Protein missing');
+    expect(foodQualityIssues(providerFood({ calories: null, protein: null }))).toContain('Calorieën ontbreekt');
+    expect(foodQualityIssues(providerFood({ calories: null, protein: null }))).toContain('Eiwit ontbreekt');
   });
 });

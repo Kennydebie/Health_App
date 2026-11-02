@@ -303,3 +303,111 @@
 .empty-p73 h3 { margin: 0; color: var(--text); }
 .empty-p73 p { margin: 0; max-width: 420px; line-height: 1.55; font-size: 14px; }
 @media (prefers-reduced-motion: reduce) { .journey__fill, .target-bar__track i, .fade-in, .assistant-panel { transition: none; animation: none; } }
+
+/* Legacy training card: Dutch button labels are longer, so the actions wrap under the text. */
+.daily-recommendation { flex-wrap: wrap; }
+.daily-recommendation > div:first-child { flex: 1 1 340px; }
+.daily-recommendation > div:last-child { flex: 1 1 100%; flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
+
+/* Legacy screens (food log, body, training, weekly check, training settings) were designed dark.
+   In light mode they render as a dark panel with their original tokens instead of half-light surfaces. */
+:root[data-theme="light"] .legacy-scope {
+  color-scheme: dark;
+  color: #f2f7f4;
+  --bg: #0b1211;
+  --surface: #131c1a;
+  --surface-2: #192522;
+  --surface-3: #22312d;
+  --line: #30413c;
+  --line-soft: rgba(210, 239, 228, .085);
+  --text: #f2f7f4;
+  --muted: #9baca5;
+  --muted-2: #70847b;
+  --accent: #72d3b2;
+  --accent-strong: #8de0c2;
+  --accent-soft: rgba(114, 211, 178, .13);
+  --accent-faint: rgba(114, 211, 178, .07);
+  --focus-ring: rgba(114, 211, 178, .18);
+  --success: var(--accent);
+  --success-soft: var(--accent-soft);
+  --warning: #efb44c;
+  --warning-soft: rgba(239, 180, 76, .13);
+  --error: #ef7f73;
+  --error-soft: rgba(239, 127, 115, .13);
+  --destructive: var(--error);
+  --destructive-soft: var(--error-soft);
+  --favorite: #d9ad62;
+  --favorite-soft: rgba(217, 173, 98, .13);
+  --lime: var(--accent);
+  --lime-soft: var(--accent-soft);
+  --blue: #83bde5;
+  --blue-soft: rgba(131, 189, 229, .13);
+  --orange: #e5b878;
+  --orange-soft: rgba(229, 184, 120, .13);
+  --red: var(--error);
+  --red-soft: var(--error-soft);
+  --purple: #b7a4e3;
+  --radius-lg: 26px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --shadow: 0 22px 70px rgba(2, 10, 8, .34);
+  background: radial-gradient(circle at 82% -12%, rgba(131, 189, 229, .1), transparent 30%), #0b1211;
+  border-radius: 28px;
+  margin: 0 clamp(10px, 3vw, 40px) 40px;
+  overflow: hidden;
+}
+:root[data-theme="light"] .legacy-scope .card { background: linear-gradient(145deg, rgba(25, 37, 33, .96), rgba(16, 25, 22, .98)); box-shadow: none; }
+:root[data-theme="light"] .legacy-scope input, :root[data-theme="light"] .legacy-scope select, :root[data-theme="light"] .legacy-scope textarea { color: var(--text); background: #0e1715; border-color: var(--line); }
+:root[data-theme="light"] .legacy-scope .secondary-button { color: var(--text); background: var(--surface-3); border-color: var(--line); }
+:root[data-theme="light"] .legacy-scope .primary-button { color: #0d1b16; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .legacy-scope {
+    color-scheme: dark;
+    color: #f2f7f4;
+  --bg: #0b1211;
+  --surface: #131c1a;
+  --surface-2: #192522;
+  --surface-3: #22312d;
+  --line: #30413c;
+  --line-soft: rgba(210, 239, 228, .085);
+  --text: #f2f7f4;
+  --muted: #9baca5;
+  --muted-2: #70847b;
+  --accent: #72d3b2;
+  --accent-strong: #8de0c2;
+  --accent-soft: rgba(114, 211, 178, .13);
+  --accent-faint: rgba(114, 211, 178, .07);
+  --focus-ring: rgba(114, 211, 178, .18);
+  --success: var(--accent);
+  --success-soft: var(--accent-soft);
+  --warning: #efb44c;
+  --warning-soft: rgba(239, 180, 76, .13);
+  --error: #ef7f73;
+  --error-soft: rgba(239, 127, 115, .13);
+  --destructive: var(--error);
+  --destructive-soft: var(--error-soft);
+  --favorite: #d9ad62;
+  --favorite-soft: rgba(217, 173, 98, .13);
+  --lime: var(--accent);
+  --lime-soft: var(--accent-soft);
+  --blue: #83bde5;
+  --blue-soft: rgba(131, 189, 229, .13);
+  --orange: #e5b878;
+  --orange-soft: rgba(229, 184, 120, .13);
+  --red: var(--error);
+  --red-soft: var(--error-soft);
+  --purple: #b7a4e3;
+  --radius-lg: 26px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --shadow: 0 22px 70px rgba(2, 10, 8, .34);
+    background: radial-gradient(circle at 82% -12%, rgba(131, 189, 229, .1), transparent 30%), #0b1211;
+    border-radius: 28px;
+    margin: 0 clamp(10px, 3vw, 40px) 40px;
+    overflow: hidden;
+  }
+  :root:not([data-theme="dark"]) .legacy-scope .card { background: linear-gradient(145deg, rgba(25, 37, 33, .96), rgba(16, 25, 22, .98)); box-shadow: none; }
+  :root:not([data-theme="dark"]) .legacy-scope input, :root:not([data-theme="dark"]) .legacy-scope select, :root:not([data-theme="dark"]) .legacy-scope textarea { color: var(--text); background: #0e1715; border-color: var(--line); }
+  :root:not([data-theme="dark"]) .legacy-scope .secondary-button { color: var(--text); background: var(--surface-3); border-color: var(--line); }
+  :root:not([data-theme="dark"]) .legacy-scope .primary-button { color: #0d1b16; }
+}

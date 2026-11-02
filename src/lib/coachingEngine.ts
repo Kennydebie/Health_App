@@ -12,6 +12,12 @@ import { weightHistory } from './bodyMeasurements';
 import { shiftDate, toDateKey } from './date';
 import { getNutritionTotals } from './selectors';
 
+const STRENGTH_NL: Record<string, string> = { improving: 'aan het verbeteren', stable: 'stabiel', slightly_declining: 'licht dalend', meaningfully_declining: 'duidelijk dalend', insufficient_data: 'nog onbekend' };
+const PAUSE_NL: Record<string, string> = { traveling: 'op reis', sick: 'ziek', recovery_week: 'herstelweek', maintenance_break: 'onderhoudspauze', paused: 'gepauzeerd' };
+function strengthNl(value: string) { return STRENGTH_NL[value] ?? value.replaceAll('_', ' '); }
+function pauseNl(value: string) { return PAUSE_NL[value] ?? value.replace('_', ' '); }
+
+
 const DAY_MS = 86_400_000;
 
 export type WeightPaceStatus = 'slower_than_target' | 'on_target' | 'faster_than_target' | 'insufficient_data';
@@ -236,10 +242,10 @@ export function buildCoachingInputs(data: AppData, referenceDate = toDateKey()):
 
 function evidenceFor(inputs: CoachingInputs): CoachingEvidence[] {
   return [
-    { label: 'Weight trend', value: inputs.weeklyChangeKg == null ? 'Not enough data' : `${inputs.weeklyChangeKg > 0 ? '+' : ''}${inputs.weeklyChangeKg.toFixed(2)} kg`, detail: `${inputs.currentWeighIns} current and ${inputs.previousWeighIns} previous weigh-ins` },
-    { label: 'Nutrition logging', value: `${inputs.completeNutritionDays} complete days`, detail: inputs.averageCalories == null ? 'No reliable average' : `${Math.round(inputs.averageCalories)} kcal average` },
-    { label: 'Protein', value: inputs.averageProtein == null ? 'Not enough data' : `${Math.round(inputs.averageProtein)} g average` },
-    { label: 'Training', value: `${inputs.completedWorkouts} of ${inputs.plannedWorkouts} sessions`, detail: `Strength ${inputs.overallStrength.replaceAll('_', ' ')}` },
+    { label: 'Gewichtstrend', value: inputs.weeklyChangeKg == null ? 'Te weinig gegevens' : `${inputs.weeklyChangeKg > 0 ? '+' : ''}${inputs.weeklyChangeKg.toFixed(2)} kg`, detail: `${inputs.currentWeighIns} wegingen deze week, ${inputs.previousWeighIns} vorige week` },
+    { label: 'Voedingslog', value: `${inputs.completeNutritionDays} complete dagen`, detail: inputs.averageCalories == null ? 'Geen betrouwbaar gemiddelde' : `${Math.round(inputs.averageCalories)} kcal gemiddeld` },
+    { label: 'Eiwit', value: inputs.averageProtein == null ? 'Te weinig gegevens' : `${Math.round(inputs.averageProtein)} g gemiddeld` },
+    { label: 'Training', value: `${inputs.completedWorkouts} van ${inputs.plannedWorkouts} trainingen`, detail: `Kracht: ${strengthNl(inputs.overallStrength)}` },
   ];
 }
 
@@ -249,27 +255,27 @@ export function decideWeeklyCoach(data: AppData, referenceDate = toDateKey()): C
   const evidence = evidenceFor(inputs);
   const nextReviewDate = shiftDate(referenceDate, 7);
   const missingDataRequirements = [
-    ...(inputs.currentWeighIns < 5 ? [`${5 - inputs.currentWeighIns} more weigh-in${5 - inputs.currentWeighIns === 1 ? '' : 's'} this week`] : []),
-    ...(inputs.completeNutritionDays < 5 ? [`${5 - inputs.completeNutritionDays} more fully logged day${5 - inputs.completeNutritionDays === 1 ? '' : 's'}`] : []),
+    ...(inputs.currentWeighIns < 5 ? [`nog ${5 - inputs.currentWeighIns} ${5 - inputs.currentWeighIns === 1 ? 'weging' : 'wegingen'} deze week`] : []),
+    ...(inputs.completeNutritionDays < 5 ? [`nog ${5 - inputs.completeNutritionDays} volledig ${5 - inputs.completeNutritionDays === 1 ? 'gelogde dag' : 'gelogde dagen'}`] : []),
   ];
   const base = { confidence, evidence, nextReviewDate, missingDataRequirements, secondaryActions: [] as string[], warnings: [] as string[] };
 
   if (inputs.activePause) return {
-    ...base, conclusion: 'paused', title: 'Trend interpretation is paused',
-    explanation: `Your plan is marked ${inputs.activePause.type.replace('_', ' ')}. Plateau detection and target reductions are suspended until you resume.`,
-    primaryAction: 'Follow the simplest nutrition and recovery actions you can manage, then resume when ready.',
+    ...base, conclusion: 'paused', title: 'Trendbeoordeling staat op pauze',
+    explanation: `Je plan staat op pauze (${pauseNl(inputs.activePause.type)}). Plateaus en lagere doelen worden pas weer beoordeeld als je hervat.`,
+    primaryAction: 'Doe wat haalbaar is voor voeding en herstel, en hervat als je er klaar voor bent.',
   };
 
   if (inputs.goalReached) return {
-    ...base, conclusion: 'goal_reached', title: 'Your target range has been reached',
-    explanation: `Your current seven-day average is ${inputs.currentWeightAverage?.toFixed(1)} kg, inside the ${data.activeGoal.targetRangeKg[0].toFixed(1)}–${data.activeGoal.targetRangeKg[1].toFixed(1)} kg target range.`,
-    primaryAction: 'Keep the current targets this week and choose whether to begin a maintenance phase.',
+    ...base, conclusion: 'goal_reached', title: 'Je doelbereik is bereikt',
+    explanation: `Je 7-daags gemiddelde is ${inputs.currentWeightAverage?.toFixed(1)} kg, binnen je doelbereik van ${data.activeGoal.targetRangeKg[0].toFixed(1)}–${data.activeGoal.targetRangeKg[1].toFixed(1)} kg.`,
+    primaryAction: 'Houd deze week je doelen aan en kies of je een onderhoudsfase start.',
   };
 
   if (confidence === 'insufficient' || inputs.currentWeighIns < 4 || inputs.previousWeighIns < 3) return {
-    ...base, conclusion: 'improve_logging', title: 'Keep the plan while you gather better data',
-    explanation: `There is not enough consistent data to justify a plan change. ${missingDataRequirements.length ? `Complete ${missingDataRequirements.join(' and ')} before the next review.` : 'Continue the current targets.'}`,
-    primaryAction: 'Keep calories unchanged and complete the missing weigh-ins and food logs.',
+    ...base, conclusion: 'improve_logging', title: 'Houd het plan aan en verzamel betere gegevens',
+    explanation: `Er zijn te weinig consistente gegevens om het plan te wijzigen. ${missingDataRequirements.length ? `Vul vóór de volgende check aan: ${missingDataRequirements.join(' en ')}.` : 'Ga door met je huidige doelen.'}`,
+    primaryAction: 'Houd je calorieën gelijk en vul ontbrekende wegingen en voedingsdagen aan.',
   };
 
   const rapidCurrent = inputs.weeklyChangePct != null && inputs.weeklyChangePct < -Math.max(1, data.activeGoal.desiredLossRateMaxPct);
@@ -278,58 +284,58 @@ export function decideWeeklyCoach(data: AppData, referenceDate = toDateKey()): C
   const intakeLow = inputs.calorieAdherencePct != null && inputs.calorieAdherencePct < 88;
   const strengthDeclining = inputs.overallStrength === 'meaningfully_declining' || inputs.overallStrength === 'slightly_declining';
   if ((rapidCurrent && rapidPrevious) || (rapidCurrent && strengthDeclining && (poorRecovery || intakeLow))) return {
-    ...base, conclusion: 'increase_calories', title: 'The deficit is becoming too aggressive',
-    explanation: 'Weight is dropping faster than the coaching range while recovery or training performance is deteriorating. A larger deficit is not the goal.',
-    primaryAction: 'Increase daily intake modestly and hold training loads steady while recovery stabilizes.',
-    proposedChange: { variable: 'calorie_target', previousValue: data.profile.calorieTarget, proposedValue: data.profile.calorieTarget + 150, expectedEffect: 'Reduce the rate of loss and support training performance.' },
-    warnings: ['Do not reduce calories further or compensate with extra cardio this week.'],
+    ...base, conclusion: 'increase_calories', title: 'Je tekort wordt te groot',
+    explanation: 'Je gewicht daalt sneller dan het bereik, terwijl herstel of trainingsprestaties achteruitgaan. Een groter tekort is niet het doel.',
+    primaryAction: 'Eet iets meer per dag en houd je trainingsgewichten gelijk tot je herstel stabiel is.',
+    proposedChange: { variable: 'calorie_target', previousValue: data.profile.calorieTarget, proposedValue: data.profile.calorieTarget + 150, expectedEffect: 'Rustiger afvallen en je trainingen ondersteunen.' },
+    warnings: ['Verlaag je calorieën niet verder en compenseer deze week niet met extra cardio.'],
   };
 
   const caloriesHigh = inputs.calorieAdherencePct != null && inputs.calorieAdherencePct > 107;
   const flatTrend = inputs.weeklyChangePct != null && inputs.weeklyChangePct > -data.activeGoal.desiredLossRateMinPct;
   if (flatTrend && caloriesHigh && inputs.completeNutritionDays >= 5) return {
-    ...base, conclusion: 'improve_adherence', title: 'Test the current plan more consistently',
-    explanation: `Average intake was ${Math.round((inputs.averageCalories ?? 0) - data.profile.calorieTarget)} kcal above target. The current target has not been followed closely enough to judge it as ineffective.`,
-    primaryAction: `Average closer to ${data.profile.calorieTarget.toLocaleString()} kcal before considering a lower target.`,
+    ...base, conclusion: 'improve_adherence', title: 'Volg het huidige plan eerst consequenter',
+    explanation: `Je inname lag gemiddeld ${Math.round((inputs.averageCalories ?? 0) - data.profile.calorieTarget)} kcal boven je doel. Het huidige doel is nog niet goed genoeg gevolgd om te zeggen dat het niet werkt.`,
+    primaryAction: `Kom gemiddeld dichter bij ${data.profile.calorieTarget.toLocaleString('nl-NL')} kcal voordat je een lager doel overweegt.`,
   };
 
   if (flatTrend && inputs.completeNutritionDays < 5) return {
-    ...base, conclusion: 'improve_logging', title: 'The data do not support a calorie change',
-    explanation: `Weight was nearly flat, but only ${inputs.completeNutritionDays} days were fully logged. That is a data-quality problem, not proof that the plan failed.`,
-    primaryAction: 'Keep the current targets and confirm at least five complete food days this week.',
+    ...base, conclusion: 'improve_logging', title: 'De gegevens rechtvaardigen geen andere calorieën',
+    explanation: `Je gewicht bleef bijna gelijk, maar maar ${inputs.completeNutritionDays} dagen zijn volledig gelogd. Dat is een gegevensprobleem, geen bewijs dat het plan niet werkt.`,
+    primaryAction: 'Houd je doelen aan en log deze week minstens vijf volledige dagen.',
   };
 
   const nearTargetCalories = inputs.calorieAdherencePct != null && inputs.calorieAdherencePct >= 93 && inputs.calorieAdherencePct <= 105;
   if (inputs.plateauDays >= 14 && nearTargetCalories && inputs.completeNutritionDays >= 5 && !inputs.recentPlanChange) return {
-    ...base, conclusion: 'reduce_calories', title: 'A small adjustment is reasonable',
-    explanation: `Your weight trend has been effectively flat for ${inputs.plateauDays} days with complete logging and average intake close to target. Training performance is ${inputs.overallStrength.replaceAll('_', ' ')}.`,
-    primaryAction: 'Choose one small adjustment. Do not reduce calories and increase activity at the same time.',
-    proposedChange: { variable: 'calorie_target', previousValue: data.profile.calorieTarget, proposedValue: Math.max(1400, data.profile.calorieTarget - 100), expectedEffect: 'Create a small additional deficit for the next 14 days.' },
-    alternativeChange: { variable: 'daily_steps', previousValue: data.coachingSettings.dailyStepGoal, proposedValue: data.coachingSettings.dailyStepGoal + 1750, expectedEffect: 'Increase low-fatigue activity without changing food targets.' },
+    ...base, conclusion: 'reduce_calories', title: 'Een kleine aanpassing is redelijk',
+    explanation: `Je gewichtstrend is ${inputs.plateauDays} dagen vrijwel vlak, terwijl je volledig logt en dicht bij je doel eet. Je kracht is ${strengthNl(inputs.overallStrength)}.`,
+    primaryAction: 'Kies één kleine aanpassing. Niet tegelijk minder eten én meer bewegen.',
+    proposedChange: { variable: 'calorie_target', previousValue: data.profile.calorieTarget, proposedValue: Math.max(1400, data.profile.calorieTarget - 100), expectedEffect: 'Een klein extra tekort voor de komende 14 dagen.' },
+    alternativeChange: { variable: 'daily_steps', previousValue: data.coachingSettings.dailyStepGoal, proposedValue: data.coachingSettings.dailyStepGoal + 1750, expectedEffect: 'Meer lichte beweging zonder je voedingsdoelen te wijzigen.' },
     nextReviewDate: shiftDate(referenceDate, 14),
   };
 
   if (inputs.weightPace === 'on_target') return {
-    ...base, conclusion: 'keep_plan', title: 'The cut is working—keep the plan unchanged',
-    explanation: `Your seven-day average decreased ${Math.abs(inputs.weeklyChangeKg ?? 0).toFixed(2)} kg (${Math.abs(inputs.weeklyChangePct ?? 0).toFixed(2)}%). That is inside your coaching range. Strength is ${inputs.overallStrength.replaceAll('_', ' ')}.`,
-    primaryAction: 'Keep calories, activity, and training targets unchanged.',
-    secondaryActions: inputs.proteinAdherencePct != null && inputs.proteinAdherencePct < 90 ? ['Bring average protein closer to target.'] : [],
+    ...base, conclusion: 'keep_plan', title: 'Het werkt: houd het plan aan',
+    explanation: `Je 7-daags gemiddelde daalde ${Math.abs(inputs.weeklyChangeKg ?? 0).toFixed(2)} kg (${Math.abs(inputs.weeklyChangePct ?? 0).toFixed(2)}%). Dat valt binnen je bereik. Je kracht is ${strengthNl(inputs.overallStrength)}.`,
+    primaryAction: 'Houd calorieën, activiteit en trainingsdoelen gelijk.',
+    secondaryActions: inputs.proteinAdherencePct != null && inputs.proteinAdherencePct < 90 ? ['Kom gemiddeld dichter bij je eiwitdoel.'] : [],
   };
 
   if (strengthDeclining && (poorRecovery || intakeLow)) return {
-    ...base, conclusion: 'recovery_focus', title: 'Protect performance before pushing the deficit',
-    explanation: 'Several recovery signals or exercise trends are moving in the wrong direction. One poor session is not decisive, but the combined pattern deserves attention.',
-    primaryAction: 'Keep calories unchanged, hit protein, and reduce one working set from the main exercises for one week.',
-    proposedChange: { variable: 'training_volume', previousValue: 'current working sets', proposedValue: 'one fewer main-exercise set', expectedEffect: 'Reduce fatigue while preserving the most important training stimulus.' },
+    ...base, conclusion: 'recovery_focus', title: 'Bescherm je prestaties voordat je strenger wordt',
+    explanation: 'Meerdere herstelsignalen of oefeningen gaan de verkeerde kant op. Eén slechte training zegt niets, maar samen verdient het aandacht.',
+    primaryAction: 'Houd calorieën gelijk, haal je eiwit en doe één week één werkset minder bij de hoofdoefeningen.',
+    proposedChange: { variable: 'training_volume', previousValue: 'huidige werksets', proposedValue: 'één set minder per hoofdoefening', expectedEffect: 'Minder vermoeidheid met behoud van de belangrijkste prikkel.' },
   };
 
   return {
-    ...base, conclusion: 'keep_plan', title: 'No plan change is needed yet',
+    ...base, conclusion: 'keep_plan', title: 'Nog geen aanpassing nodig',
     explanation: inputs.recentPlanChange
-      ? `A recent ${inputs.recentPlanChange.variable.replace('_', ' ')} change is still taking effect. Review it after the scheduled period rather than changing another variable now.`
-      : 'The current trend does not justify a calorie or activity adjustment. Continue collecting consistent data.',
-    primaryAction: 'Keep the current plan and review another full week of data.',
-    secondaryActions: inputs.proteinAdherencePct != null && inputs.proteinAdherencePct < 90 ? ['Prioritize protein before adding optional snacks.'] : [],
+      ? `Een recente aanpassing (${inputs.recentPlanChange.variable.replace('_', ' ')}) werkt nog door. Beoordeel die eerst na de geplande periode in plaats van nu iets anders te wijzigen.`
+      : 'De huidige trend rechtvaardigt geen aanpassing van calorieën of activiteit. Blijf consequent meten.',
+    primaryAction: 'Houd het plan aan en beoordeel nog een volle week.',
+    secondaryActions: inputs.proteinAdherencePct != null && inputs.proteinAdherencePct < 90 ? ['Geef eiwit voorrang boven extra tussendoortjes.'] : [],
   };
 }
 

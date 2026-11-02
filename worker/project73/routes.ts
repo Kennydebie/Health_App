@@ -9,7 +9,7 @@ import { decryptSecret, encryptionConfigured, encryptSecret, sha256Hex } from '.
 import { isSameSite, json, mapWithConcurrency, rateLimited, readBody } from './http';
 import { PicnicIntegrationError, type PicnicAdapter, type PicnicAuthenticator } from './picnicAdapter';
 import { createLiveAdapter, createLiveAuthenticator } from './picnicLive';
-import { createMockAdapter } from './picnicMock';
+import { createMockAdapter, resetMockState } from './picnicMock';
 import * as store from './store';
 
 export interface Project73Env {
@@ -257,12 +257,13 @@ async function itemForRequirement(env: Project73Env, userId: string, adapter: Pi
 }
 
 async function prepareShopping(request: Request, env: Project73Env, deps: Project73Deps, userId: string) {
-  if (rateLimited(`${userId}:prepare`, 20, 60 * 60_000)) return json({ code: 'rate_limited', message: 'Even wachten: te veel zoekopdrachten.' }, 429);
   const body = await readBody(request, prepareShoppingSchema);
   if (!body.ok) return body.response;
   if (!env.DB) return json({ code: 'persistence_unavailable' }, 503);
   const resolved = await resolveAdapter(env, deps, userId, body.value.demo);
   if (resolved instanceof Response) return resolved;
+  // The limit protects Picnic from excessive searches; demo data makes no external calls.
+  if (!resolved.demo && rateLimited(`${userId}:prepare`, 20, 60 * 60_000)) return json({ code: 'rate_limited', message: 'Even wachten: te veel zoekopdrachten.' }, 429);
   try {
     const items = await mapWithConcurrency(body.value.requirements, 3, (requirement) => itemForRequirement(env, userId, resolved.adapter, requirement, body.value));
     const now = new Date().toISOString();
@@ -561,6 +562,7 @@ export async function deleteProject73Data(request: Request, env: Project73Env, d
   if (!env.DB) return json({ code: 'persistence_unavailable' }, 503);
   await disconnect(env, deps, userId);
   await store.deleteProject73UserData(env.DB, userId, `u:${await sha256Hex(userId)}:`);
+  resetMockState(userId);
   return null;
 }
 

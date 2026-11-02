@@ -337,7 +337,7 @@ export function SettingsPage({ controller, shopping, tab, setTab, onProfileDirty
       {tab === 'picnic' ? <PicnicTab shopping={shopping} /> : null}
       {tab === 'ai' ? <AiTab /> : null}
       {tab === 'data' ? <DataTab controller={controller} shopping={shopping} /> : null}
-      {tab === 'app' ? <Suspense fallback={<PageSkeleton />}><div style={{ margin: '0 -1px' }}><ProfilePage controller={controller} onDirtyChange={onProfileDirtyChange} mode="training" /></div></Suspense> : null}
+      {tab === 'app' ? <Suspense fallback={<PageSkeleton />}><div className="legacy-scope" style={{ margin: 0 }}><ProfilePage controller={controller} onDirtyChange={onProfileDirtyChange} mode="training" /></div></Suspense> : null}
     </section>
   );
 }

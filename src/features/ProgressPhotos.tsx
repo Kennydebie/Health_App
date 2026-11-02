@@ -24,9 +24,9 @@ export function ProgressPhotos() {
     let cancelled = false;
     fetch('/api/progress-photos', { credentials: 'same-origin' }).then(async (response) => {
       const body = await response.json() as PhotoResponse;
-      if (!response.ok) throw new Error(body.code === 'auth_required' ? 'Sign in to use private progress photos.' : 'Photo storage is unavailable right now.');
+      if (!response.ok) throw new Error(body.code === 'auth_required' ? 'Log in om privéfoto’s te gebruiken.' : 'Foto-opslag is nu niet beschikbaar.');
       if (!cancelled) setPhotos(body.photos ?? []);
-    }).catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Could not load photos.'); }).finally(() => { if (!cancelled) setLoading(false); });
+    }).catch((reason) => { if (!cancelled) setError(reason instanceof Error ? reason.message : 'Foto’s konden niet worden geladen.'); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -43,32 +43,32 @@ export function ProgressPhotos() {
     try {
       const response = await fetch('/api/progress-photos', { method: 'POST', body: form, credentials: 'same-origin' });
       const body = await response.json() as PhotoResponse;
-      if (!response.ok || !body.photo) throw new Error(body.code === 'image_too_large' ? 'Choose an image smaller than 8 MB.' : 'The photo could not be saved.');
+      if (!response.ok || !body.photo) throw new Error(body.code === 'image_too_large' ? 'Kies een afbeelding kleiner dan 8 MB.' : 'De foto kon niet worden opgeslagen.');
       setPhotos((current) => [body.photo!, ...current]); setOpen(false); setFile(null); setNote(''); setWeight('');
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'The photo could not be saved.'); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'De foto kon niet worden opgeslagen.'); }
     finally { setUploading(false); }
   };
 
   const remove = async (photo: ProgressPhoto) => {
-    if (!window.confirm(`Delete the ${prettyDate(photo.date)} ${photo.pose} photo? This cannot be undone.`)) return;
+    if (!window.confirm(`Foto van ${prettyDate(photo.date)} verwijderen? Dit kan niet ongedaan worden gemaakt.`)) return;
     const response = await fetch(`/api/progress-photos/${encodeURIComponent(photo.id)}`, { method: 'DELETE', credentials: 'same-origin' });
     if (response.ok) setPhotos((current) => current.filter((item) => item.id !== photo.id));
-    else setError('The photo could not be deleted.');
+    else setError('De foto kon niet worden verwijderd.');
   };
 
   return <section className="progress-photos card">
-    <header><div><p className="eyebrow">Private visual record</p><h2>Progress photos</h2><p>Use consistent lighting, distance, clothing, and pose. Compare weeks—not day-to-day fluctuations.</p></div><button type="button" className="secondary-button" onClick={() => setOpen(true)}><ImagePlus size={17} /> Add photo</button></header>
-    <div className="photo-privacy"><LockKeyhole size={15} /><span>Photos are stored privately and are only returned to the signed-in account.</span></div>
-    {loading ? <div className="photo-loading"><LoaderCircle className="spin" size={22} /> Loading private photos…</div> : null}
-    {!loading && !photos.length ? <div className="empty-state"><Camera size={29} /><h3>Create a consistent visual baseline</h3><p>Add front, side, or back photos. The app stores the original privately; it never estimates body fat from the image.</p></div> : null}
+    <header><div><p className="eyebrow">Privé fotoverslag</p><h2>Voortgangsfoto’s</h2><p>Gebruik steeds hetzelfde licht, dezelfde afstand, kleding en houding. Vergelijk weken, niet dagen.</p></div><button type="button" className="secondary-button" onClick={() => setOpen(true)}><ImagePlus size={17} /> Foto toevoegen</button></header>
+    <div className="photo-privacy"><LockKeyhole size={15} /><span>Foto’s worden privé opgeslagen en alleen aan jouw account getoond.</span></div>
+    {loading ? <div className="photo-loading"><LoaderCircle className="spin" size={22} /> Foto’s laden…</div> : null}
+    {!loading && !photos.length ? <div className="empty-state"><Camera size={29} /><h3>Maak een vaste startfoto</h3><p>Voeg foto’s toe van voren, opzij of achter. De app bewaart ze privé en schat nooit vetpercentage uit een foto.</p></div> : null}
     {photos.length ? <>
       <div className="photo-compare-controls"><label>Earlier<select value={resolvedCompareA} onChange={(event) => setCompareA(event.target.value)}>{photos.map((photo) => <option key={photo.id} value={photo.id}>{prettyDate(photo.date)} · {photo.pose}</option>)}</select></label><label>Later<select value={resolvedCompareB} onChange={(event) => setCompareB(event.target.value)}>{photos.map((photo) => <option key={photo.id} value={photo.id}>{prettyDate(photo.date)} · {photo.pose}</option>)}</select></label></div>
-      <div className="photo-comparison">{[first, second].map((photo, index) => photo ? <figure key={`${index}-${photo.id}`}><img src={photo.imageUrl} alt={`${photo.pose} progress on ${prettyDate(photo.date)}`} loading="lazy" /><figcaption><strong>{prettyDate(photo.date)}</strong><span>{photo.pose}{photo.bodyWeightKg ? ` · ${photo.bodyWeightKg} kg` : ''}</span>{photo.note ? <small>{photo.note}</small> : null}<button type="button" className="danger" onClick={() => void remove(photo)} aria-label={`Delete ${prettyDate(photo.date)} photo`}><Trash2 size={14} /></button></figcaption></figure> : <div className="photo-placeholder" key={index}><Camera size={25} /></div>)}</div>
+      <div className="photo-comparison">{[first, second].map((photo, index) => photo ? <figure key={`${index}-${photo.id}`}><img src={photo.imageUrl} alt={`${photo.pose} progress on ${prettyDate(photo.date)}`} loading="lazy" /><figcaption><strong>{prettyDate(photo.date)}</strong><span>{photo.pose}{photo.bodyWeightKg ? ` · ${photo.bodyWeightKg} kg` : ''}</span>{photo.note ? <small>{photo.note}</small> : null}<button type="button" className="danger" onClick={() => void remove(photo)} aria-label={`Verwijder foto van ${prettyDate(photo.date)}`}><Trash2 size={14} /></button></figcaption></figure> : <div className="photo-placeholder" key={index}><Camera size={25} /></div>)}</div>
     </> : null}
     {error ? <p className="form-error">{error}</p> : null}
 
-    <Modal open={open} onClose={() => setOpen(false)} title="Add a private progress photo" subtitle="Use a consistent pose and environment for an honest comparison." footer={<><button type="button" className="secondary-button" onClick={() => setOpen(false)}>Cancel</button><button type="button" className="primary-button" disabled={!file || uploading} onClick={() => void upload()}>{uploading ? <LoaderCircle className="spin" size={17} /> : <ShieldCheck size={17} />} Save privately</button></>}>
-      <div className="progress-photo-form"><label className="photo-file"><ImagePlus size={24} /><span>{file ? file.name : 'Choose JPEG, PNG, or WebP (max 8 MB)'}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label><div><label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label><label>Pose<select value={pose} onChange={(event) => setPose(event.target.value as ProgressPhoto['pose'])}><option value="front">Front</option><option value="side">Side</option><option value="back">Back</option></select></label></div><label>Body weight (optional)<span className="unit-input"><input type="number" min="30" max="300" step="0.1" value={weight} onChange={(event) => setWeight(event.target.value)} /><span>kg</span></span></label><label>Note (optional)<textarea maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Lighting, clothing, training phase…" /></label><p><Scale size={15} /> The image is for visual comparison only. Body-composition estimates still come from measurements you explicitly log.</p></div>
+    <Modal open={open} onClose={() => setOpen(false)} title="Privé voortgangsfoto toevoegen" subtitle="Gebruik dezelfde houding en omgeving voor een eerlijke vergelijking." footer={<><button type="button" className="secondary-button" onClick={() => setOpen(false)}>Cancel</button><button type="button" className="primary-button" disabled={!file || uploading} onClick={() => void upload()}>{uploading ? <LoaderCircle className="spin" size={17} /> : <ShieldCheck size={17} />} Save privately</button></>}>
+      <div className="progress-photo-form"><label className="photo-file"><ImagePlus size={24} /><span>{file ? file.name : 'Kies JPEG, PNG of WebP (max. 8 MB)'}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label><div><label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label><label>Pose<select value={pose} onChange={(event) => setPose(event.target.value as ProgressPhoto['pose'])}><option value="front">Front</option><option value="side">Side</option><option value="back">Back</option></select></label></div><label>Gewicht (optioneel)<span className="unit-input"><input type="number" min="30" max="300" step="0.1" value={weight} onChange={(event) => setWeight(event.target.value)} /><span>kg</span></span></label><label>Notitie (optioneel)<textarea maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Licht, kleding, trainingsfase…" /></label><p><Scale size={15} /> De foto is alleen om visueel te vergelijken. Lichaamswaarden komen uit je eigen metingen.</p></div>
     </Modal>
   </section>;
 }

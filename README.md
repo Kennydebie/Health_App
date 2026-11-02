@@ -95,7 +95,7 @@ Follow [`docs/manual-live-picnic-test.md`](docs/manual-live-picnic-test.md) for 
 - picnic-api is **unofficial**. Picnic can change its app at any time; the app then reports a clear error (`UnexpectedPageFormatError` and others are mapped to Dutch messages) instead of guessing.
 - Nutrition values of recipes use rounded reference values (Dutch NEVO / label averages, marked "deels geschat") until a matched Picnic product supplies a complete label, which then replaces the estimate everywhere.
 - The recipe library is curated (29 simple recipes, 41 ingredients). The planner is deterministic and seeded; the AI does not invent recipes.
-- Some legacy screens (training, FitDays, body composition) keep their original dark styling in light mode in places.
+- In light mode the legacy screens (food log, body & measurements, training, weekly check, training settings) are shown as a dark panel, because they were designed dark. Exercise names stay in their common gym English.
 - Search is rate-limited and cached per user for 6 hours (product labels 24 hours).
 
 ## Visual asset

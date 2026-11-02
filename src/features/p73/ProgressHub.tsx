@@ -166,11 +166,15 @@ export function ProgressHub({ controller, tab, setTab, activeSessionId, setActiv
     <>
       {nav}
       {tab === 'overview' ? <Overview controller={controller} /> : null}
-      <Suspense fallback={<PageSkeleton />}>
-        {tab === 'body' ? <ProgressPage controller={controller} /> : null}
-        {tab === 'training' ? <WorkoutPage controller={controller} activeSessionId={activeSessionId} setActiveSessionId={setActiveSessionId} onStartWorkout={onStartWorkout} /> : null}
-        {tab === 'coach' ? <CoachPage controller={controller} /> : null}
-      </Suspense>
+      {tab !== 'overview' ? (
+        <div className="legacy-scope">
+          <Suspense fallback={<PageSkeleton />}>
+            {tab === 'body' ? <ProgressPage controller={controller} /> : null}
+            {tab === 'training' ? <WorkoutPage controller={controller} activeSessionId={activeSessionId} setActiveSessionId={setActiveSessionId} onStartWorkout={onStartWorkout} /> : null}
+            {tab === 'coach' ? <CoachPage controller={controller} /> : null}
+          </Suspense>
+        </div>
+      ) : null}
     </>
   );
 }

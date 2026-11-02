@@ -7,7 +7,7 @@ import { getCurrentStreak, getWeeklyConsistency } from './selectors';
 describe('engagement helpers', () => {
   it('uses plain-language workout names without changing stored titles', () => {
     const data = createSeedData();
-    expect(displayWorkoutTitle(data.program[0])).toBe('Chest, back & arms');
+    expect(displayWorkoutTitle(data.program[0])).toBe('Borst, rug & armen');
     expect(data.program[0].title).toBe('Upper A');
   });
 

@@ -69,7 +69,7 @@ describe('adaptive cut coaching engine', () => {
     const decision = decideWeeklyCoach(data, reference);
     expect(decision.conclusion).toBe('keep_plan');
     expect(decision.proposedChange).toBeUndefined();
-    expect(decision.explanation).toContain('inside your coaching range');
+    expect(decision.explanation).toContain('binnen je bereik');
   });
 
   it('identifies a genuine plateau and proposes only one selectable change at a time', () => {
@@ -81,7 +81,7 @@ describe('adaptive cut coaching engine', () => {
     expect(decision.conclusion).toBe('reduce_calories');
     expect(decision.proposedChange).toMatchObject({ variable: 'calorie_target', proposedValue: 2000 });
     expect(decision.alternativeChange?.variable).toBe('daily_steps');
-    expect(decision.primaryAction).toContain('one small adjustment');
+    expect(decision.primaryAction).toContain('één kleine aanpassing');
   });
 
   it('does not lower calories when logging is incomplete', () => {
@@ -92,7 +92,7 @@ describe('adaptive cut coaching engine', () => {
     const decision = decideWeeklyCoach(data, reference);
     expect(decision.conclusion).toBe('improve_logging');
     expect(decision.proposedChange).toBeUndefined();
-    expect(decision.explanation).toContain('data-quality problem');
+    expect(decision.explanation).toContain('gegevensprobleem');
   });
 
   it('responds to rapid two-week loss without reducing calories further', () => {
@@ -104,7 +104,7 @@ describe('adaptive cut coaching engine', () => {
     const decision = decideWeeklyCoach(data, reference);
     expect(decision.conclusion).toBe('increase_calories');
     expect(decision.proposedChange?.proposedValue).toBeGreaterThan(data.profile.calorieTarget);
-    expect(decision.warnings.join(' ')).toContain('Do not reduce calories');
+    expect(decision.warnings.join(' ')).toContain('Verlaag je calorieën niet');
   });
 
   it('treats above-target intake as an adherence problem instead of plan failure', () => {
@@ -115,7 +115,7 @@ describe('adaptive cut coaching engine', () => {
     const decision = decideWeeklyCoach(data, reference);
     expect(decision.conclusion).toBe('improve_adherence');
     expect(decision.proposedChange).toBeUndefined();
-    expect(decision.explanation).toContain('above target');
+    expect(decision.explanation).toContain('boven je doel');
   });
 
   it('prioritizes a calorie-aware protein gap late in the day', () => {
