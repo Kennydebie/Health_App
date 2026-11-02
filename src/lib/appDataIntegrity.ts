@@ -11,6 +11,8 @@ const V12_COLLECTION_KEYS = [
   'weeklyCheckIns', 'coachRecommendations', 'planChanges', 'productEvents',
 ] as const;
 
+const V13_COLLECTION_KEYS = ['mealPlans', 'customRecipes', 'favoriteRecipeIds', 'pantry'] as const;
+
 const fixtureFoodIds = new Set([
   'demo_yogurt', 'demo_whey', 'demo_walnuts', 'demo_honey', 'demo_blueberries', 'demo_wrap', 'demo_chicken',
   'demo_pepper', 'demo_spinach', 'yest_eggs', 'yest_bread', 'yest_salmon', 'yest_potatoes', 'yest_beans',
@@ -50,7 +52,7 @@ export function validateAppData(value: unknown) {
     }
   }
   const version = Number(value.version);
-  const collectionKeys = version >= 12 ? [...CORE_COLLECTION_KEYS, ...V12_COLLECTION_KEYS] : CORE_COLLECTION_KEYS;
+  const collectionKeys = version >= 13 ? [...CORE_COLLECTION_KEYS, ...V12_COLLECTION_KEYS, ...V13_COLLECTION_KEYS] : version >= 12 ? [...CORE_COLLECTION_KEYS, ...V12_COLLECTION_KEYS] : CORE_COLLECTION_KEYS;
   for (const key of collectionKeys) {
     if (!Array.isArray(value[key])) errors.push(`${key} must be a list.`);
     else if (value[key].length > 100_000) errors.push(`${key} contains too many records.`);
@@ -64,6 +66,11 @@ export function validateAppData(value: unknown) {
     if (!isRecord(value.activeGoal)) errors.push('Active goal is missing.');
     if (!isRecord(value.coachingSettings)) errors.push('Coaching settings are missing.');
     if (typeof value.onboardingCompleted !== 'boolean') errors.push('Onboarding status is invalid.');
+  }
+  if (version >= 13) {
+    if (!isRecord(value.metabolicSettings)) errors.push('Metabolic settings are missing.');
+    if (!isRecord(value.planningPreferences)) errors.push('Planning preferences are missing.');
+    if (Array.isArray(value.mealPlans) && value.mealPlans.some((plan) => !isRecord(plan) || !Array.isArray(plan.meals) || plan.meals.length > 500)) errors.push('Meal plans are invalid.');
   }
   if (typeof value.weeklyCardioTarget !== 'number' || value.weeklyCardioTarget < 0 || value.weeklyCardioTarget > 2_000) errors.push('Weekly cardio target is invalid.');
   return { valid: errors.length === 0, errors };
@@ -155,6 +162,15 @@ function mergeList<T>(remote: T[], local: T[], keyOf: (item: T) => string, conte
   return { values: [...byKey.values()], duplicates, conflicts };
 }
 
+function mergeByUpdatedAt<T extends { id: string; updatedAt: string }>(remote: T[], local: T[]) {
+  const byId = new Map(remote.map((item) => [item.id, item]));
+  for (const item of local) {
+    const existing = byId.get(item.id);
+    if (!existing || item.updatedAt >= existing.updatedAt) byId.set(item.id, item);
+  }
+  return [...byId.values()];
+}
+
 export function mergeAppData(remoteInput: AppData, localInput: AppData): MergeResult {
   const remote = stripProductionFixtures(remoteInput);
   const local = stripProductionFixtures(localInput);
@@ -169,7 +185,7 @@ export function mergeAppData(remoteInput: AppData, localInput: AppData): MergeRe
   const data: AppData = {
     ...remote,
     ...local,
-    version: Math.max(remote.version, local.version, 12),
+    version: Math.max(remote.version, local.version, 13),
     profile: local.profile,
     foodLog: merge(remote.foodLog, local.foodLog, (item) => item.id, (item) => stableString({ ...item, id: undefined })),
     nutritionTargetHistory: merge(remote.nutritionTargetHistory, local.nutritionTargetHistory, (item) => item.date),
@@ -203,6 +219,10 @@ export function mergeAppData(remoteInput: AppData, localInput: AppData): MergeRe
     planChanges: merge(remote.planChanges, local.planChanges, (item) => item.id),
     productEvents: merge(remote.productEvents, local.productEvents, (item) => item.id),
     onboardingCompleted: local.onboardingCompleted || remote.onboardingCompleted,
+    mealPlans: mergeByUpdatedAt(remote.mealPlans ?? [], local.mealPlans ?? []),
+    customRecipes: merge(remote.customRecipes ?? [], local.customRecipes ?? [], (item) => item.id),
+    pantry: mergeByUpdatedAt(remote.pantry ?? [], local.pantry ?? []),
+    favoriteRecipeIds: [...new Set([...(remote.favoriteRecipeIds ?? []), ...(local.favoriteRecipeIds ?? [])])],
   };
   return { data, duplicates, conflicts };
 }

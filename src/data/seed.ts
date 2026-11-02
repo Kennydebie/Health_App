@@ -4,6 +4,7 @@ import { DEFAULT_BODY_GOALS } from '../lib/bodyMeasurements';
 import { DEFAULT_TRAINING_PLANNER } from '../lib/adaptivePlanner';
 import { DEFAULT_NUTRITION_SETTINGS, detectedTimezone, nutritionTargetFromProfile } from '../lib/nutritionEvaluation';
 import type { AppData, BodyMeasurement, FoodLogEntry, WorkoutSession } from '../types/models';
+import { createProject73Defaults } from '../lib/project73/defaults';
 
 const now = new Date().toISOString();
 const today = toDateKey();
@@ -78,6 +79,7 @@ export function createSeedData(): AppData {
       balanceLevel: 'beginner', trainingTemplate: 'four-day-upper-lower',
   };
   return {
+    ...createProject73Defaults(now),
     version: 12,
     profile,
     foodLog: structuredClone(foodLog),

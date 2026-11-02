@@ -1,3 +1,4 @@
+import type { Project73Data } from './project73';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks';
 
 export interface Macros {
@@ -586,7 +587,7 @@ export interface ProgressionPlan {
   confirmedAt: string;
 }
 
-export interface AppData {
+export interface AppData extends Project73Data {
   version: number;
   profile: UserProfile;
   foodLog: FoodLogEntry[];

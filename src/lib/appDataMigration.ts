@@ -7,6 +7,8 @@ import { toDateKey } from './date';
 import { uid } from './id';
 import { foodMap } from '../data/foods';
 import { createFoodSnapshot } from './nutrition';
+import { upgradeToProject73 } from './project73/upgrade';
+import type { Project73Data } from '../types/project73';
 import type {
   AppData,
   BodyGoalSettings,
@@ -64,7 +66,7 @@ type LegacyMeasurement = Partial<BodyMeasurement> & {
   confidence?: BodyMeasurementConfidence & { timestamp?: number | null };
 };
 
-export type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoals' | 'weightLossPlans' | 'trainingPlanner' | 'nutritionTargetHistory' | 'nutritionSettings' | 'nutritionDayRecords' | 'foodLibrary' | 'exerciseRestPreferences' | 'activeGoal' | 'coachingSettings' | 'activityLog' | 'plannedFoodEntries' | 'calorieReservations' | 'dayTemplates' | 'recoveryFeedback' | 'pausePeriods' | 'weeklyCheckIns' | 'coachRecommendations' | 'planChanges' | 'productEvents' | 'onboardingCompleted'> & {
+export type LegacyAppData = Omit<AppData, keyof Project73Data | 'profile' | 'measurements' | 'bodyGoals' | 'weightLossPlans' | 'trainingPlanner' | 'nutritionTargetHistory' | 'nutritionSettings' | 'nutritionDayRecords' | 'foodLibrary' | 'exerciseRestPreferences' | 'activeGoal' | 'coachingSettings' | 'activityLog' | 'plannedFoodEntries' | 'calorieReservations' | 'dayTemplates' | 'recoveryFeedback' | 'pausePeriods' | 'weeklyCheckIns' | 'coachRecommendations' | 'planChanges' | 'productEvents' | 'onboardingCompleted'> & {
   profile: UserProfile & { startWeightKg?: number; currentWeightKg?: number };
   measurements?: LegacyMeasurement[];
   bodyMeasurements?: LegacyMeasurement[];
@@ -90,7 +92,7 @@ export type LegacyAppData = Omit<AppData, 'profile' | 'measurements' | 'bodyGoal
   planChanges?: AppData['planChanges'];
   productEvents?: AppData['productEvents'];
   onboardingCompleted?: boolean;
-};
+} & Partial<Project73Data>;
 
 export const emptyMeasurementValues = {
   weightKg: null, bmi: null, bodyFatPercent: null, fatMassKg: null, fatFreeMassKg: null,
@@ -225,6 +227,6 @@ export function migrateAppData(saved: AppData | LegacyAppData): AppData {
       ?? programByDay.get(legacySession.dayId)?.workoutId;
     return { ...session, workoutId: workoutId ?? `legacy_${legacySession.dayId}` };
   });
-  const migrated = { ...base, version: 12, program, sessions };
-  return { ...migrated, trainingPlanner: recalculateTrainingWeek(migrated) };
+  const migrated = { ...base, version: legacy.version >= 13 ? legacy.version : 12, program, sessions };
+  return upgradeToProject73({ ...migrated, trainingPlanner: recalculateTrainingWeek(migrated) }, toDateKey());
 }

@@ -52,6 +52,8 @@ function addTraining(data: AppData, loads: number[] = [50, 50, 50]) {
 
 function fixture() {
   const data = createInitialData();
+  // These scenarios were written against a 2100 kcal / 170 g protein plan; keep them independent of the Project 73 defaults.
+  data.profile = { ...data.profile, calorieTarget: 2100, proteinTarget: 170, carbTarget: 205, fatTarget: 67 };
   data.onboardingCompleted = true;
   data.activeGoal.startDate = shiftDate(reference, -30);
   data.trainingPlanner.dailyPlans = [];
