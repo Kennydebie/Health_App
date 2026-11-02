@@ -163,7 +163,10 @@ export function useAppData() {
           void syncData(merged.data);
           return;
         }
+        // Nothing in the account and nothing meaningful to review locally: this device's data becomes
+        // the account data, so later reloads merge silently instead of asking to migrate again.
         syncEnabled.current = true;
+        repository.markMigrationVerified();
         void syncData(stripProductionFixtures(localData));
       } catch (error) {
         if (cancelled) return;
