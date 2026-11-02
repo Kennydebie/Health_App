@@ -2,7 +2,9 @@ import { sanitizeFitDaysDraft } from '../src/lib/fitdays';
 import { DataConflictError, readUserData, writeUserData, type D1Database } from './dataStore';
 import type { BodyMeasurementConfidence, BodyMeasurementValues } from '../src/types/models';
 import { lookupExternalBarcode, searchExternalFoods } from './foodProviders';
-import { PROJECT75_PROGRESS_PHOTOS_SCHEMA } from '../db/schema';
+import { PROJECT75_PROGRESS_PHOTOS_SCHEMA, PROJECT75_USER_DATA_SCHEMA } from '../db/schema';
+import { deleteProject73Data, handleProject73, type Project73Env } from './project73/routes';
+import { handleAssistant, type AssistantEnv } from './project73/assistant';
 
 interface R2ObjectBody { body: ReadableStream<Uint8Array> }
 interface R2Bucket {
@@ -11,7 +13,7 @@ interface R2Bucket {
   delete(key: string): Promise<void>;
 }
 
-interface Env {
+interface Env extends Project73Env, AssistantEnv {
   OPENAI_API_KEY?: string;
   OPENAI_VISION_MODEL?: string;
   FITDAYS_SESSION_SECRET?: string;
@@ -215,7 +217,7 @@ async function analyzeScreenshot(request: Request, env: Env) {
   try {
     const parsed = JSON.parse(outputText) as { values?: Partial<BodyMeasurementValues>; confidence?: Partial<BodyMeasurementConfidence> };
     if (!parsed.values || !parsed.confidence) return json({ code: 'image_unreadable' }, 422);
-    const measurement = sanitizeFitDaysDraft({ ...parsed.values, confidence: parsed.confidence, source: 'fitdays_ai_image', issues: [] });
+    const measurement = sanitizeFitDaysDraft({ ...parsed.values, confidence: parsed.confidence as BodyMeasurementConfidence, source: 'fitdays_ai_image', issues: [] });
     const extractedCount = valueKeys.filter((key) => measurement[key as keyof BodyMeasurementValues] != null).length;
     if (extractedCount === 0 && !measurement.measuredAt) return json({ code: 'image_unreadable' }, 422);
     return json({ measurement });
@@ -388,6 +390,23 @@ async function lookupBarcode(request: Request) {
   } catch { return json({ code: 'provider_unavailable' }, 503); }
 }
 
+/** Deletes every record this app stores for the signed-in user, including photos and Picnic keys. */
+async function deleteAccountData(request: Request, env: Env) {
+  const userId = authenticatedUserId(request);
+  if (!userId) return json({ code: 'auth_required' }, 401);
+  if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+  if (!env.DB) return json({ code: 'persistence_unavailable' }, 503);
+  const project73 = await deleteProject73Data(request, env, {}, userId);
+  if (project73) return project73;
+  await ensureProgressPhotoSchema(env.DB);
+  const photos = await env.DB.prepare('SELECT object_key FROM project75_progress_photos WHERE user_id = ?').bind(userId).all<{ object_key: string }>();
+  for (const photo of photos.results) await env.MEDIA?.delete(photo.object_key).catch(() => undefined);
+  await env.DB.prepare('DELETE FROM project75_progress_photos WHERE user_id = ?').bind(userId).run();
+  await env.DB.prepare(PROJECT75_USER_DATA_SCHEMA).run();
+  await env.DB.prepare('DELETE FROM project75_user_data WHERE user_id = ?').bind(userId).run();
+  return json({ deleted: true });
+}
+
 export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
@@ -413,6 +432,13 @@ export default {
     const photoMatch = /^\/api\/progress-photos\/([a-f0-9-]+)$/.exec(url.pathname);
     if (photoMatch && request.method === 'DELETE') return deleteProgressPhoto(request, env, photoMatch[1]);
     if (url.pathname.startsWith('/api/progress-photos')) return json({ code: 'not_found' }, 404);
+    if (url.pathname === '/api/account' && request.method === 'DELETE') return deleteAccountData(request, env);
+    if (url.pathname === '/api/assistant' && request.method === 'POST') {
+      if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+      return handleAssistant(request, env, authenticatedUserId(request));
+    }
+    const project73 = await handleProject73(request, env, authenticatedUserId(request));
+    if (project73) return project73;
     return new Response(null, { status: 404 });
   },
 };
