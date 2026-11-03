@@ -1,12 +1,25 @@
 import { sanitizeFitDaysDraft } from '../src/lib/fitdays';
 import { DataConflictError, readUserData, writeUserData, type D1Database } from './dataStore';
 import type { BodyMeasurementConfidence, BodyMeasurementValues } from '../src/types/models';
+import { lookupExternalBarcode, searchExternalFoods } from './foodProviders';
+import { PROJECT75_PROGRESS_PHOTOS_SCHEMA, PROJECT75_USER_DATA_SCHEMA } from '../db/schema';
+import { deleteProject73Data, handleProject73, type Project73Env } from './project73/routes';
+import { aiProvider, handleAssistant, type AssistantEnv } from './project73/assistant';
 
-interface Env {
+interface R2ObjectBody { body: ReadableStream<Uint8Array> }
+interface R2Bucket {
+  put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown>;
+  get(key: string): Promise<R2ObjectBody | null>;
+  delete(key: string): Promise<void>;
+}
+
+interface Env extends Project73Env, AssistantEnv {
   OPENAI_API_KEY?: string;
   OPENAI_VISION_MODEL?: string;
   FITDAYS_SESSION_SECRET?: string;
   DB?: D1Database;
+  MEDIA?: R2Bucket;
+  USDA_API_KEY?: string;
 }
 
 interface RateWindow { count: number; resetAt: number; }
@@ -18,6 +31,7 @@ const ANALYSIS_WINDOW_MS = 60 * 60_000;
 const MAX_ENCODED_IMAGE_LENGTH = 16 * 1024 * 1024;
 const MAX_DATA_BODY_LENGTH = 4 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const MAX_PROGRESS_PHOTO_BYTES = 8 * 1024 * 1024;
 
 const numericProperties = {
   weightKg: { type: ['number', 'null'] },
@@ -203,7 +217,7 @@ async function analyzeScreenshot(request: Request, env: Env) {
   try {
     const parsed = JSON.parse(outputText) as { values?: Partial<BodyMeasurementValues>; confidence?: Partial<BodyMeasurementConfidence> };
     if (!parsed.values || !parsed.confidence) return json({ code: 'image_unreadable' }, 422);
-    const measurement = sanitizeFitDaysDraft({ ...parsed.values, confidence: parsed.confidence, source: 'fitdays_ai_image', issues: [] });
+    const measurement = sanitizeFitDaysDraft({ ...parsed.values, confidence: parsed.confidence as BodyMeasurementConfidence, source: 'fitdays_ai_image', issues: [] });
     const extractedCount = valueKeys.filter((key) => measurement[key as keyof BodyMeasurementValues] != null).length;
     if (extractedCount === 0 && !measurement.measuredAt) return json({ code: 'image_unreadable' }, 422);
     return json({ measurement });
@@ -255,6 +269,144 @@ async function putUserData(request: Request, env: Env) {
   }
 }
 
+interface ProgressPhotoRow {
+  id: string;
+  object_key: string;
+  pose: 'front' | 'side' | 'back';
+  photo_date: string;
+  body_weight_kg: number | null;
+  note: string;
+  content_type: string;
+  byte_size: number;
+  created_at: string;
+}
+
+async function ensureProgressPhotoSchema(db: D1Database) {
+  await db.prepare(PROJECT75_PROGRESS_PHOTOS_SCHEMA).run();
+  await db.prepare('CREATE INDEX IF NOT EXISTS idx_project75_progress_photos_user_date ON project75_progress_photos (user_id, photo_date DESC, created_at DESC)').run();
+}
+
+function progressPhotoPayload(row: ProgressPhotoRow) {
+  return {
+    id: row.id, pose: row.pose, date: row.photo_date, bodyWeightKg: row.body_weight_kg, note: row.note,
+    createdAt: row.created_at, imageUrl: `/api/progress-photos/${encodeURIComponent(row.id)}/image`,
+  };
+}
+
+async function listProgressPhotos(request: Request, env: Env) {
+  const userId = authenticatedUserId(request);
+  if (!userId) return json({ code: 'auth_required' }, 401);
+  if (!env.DB || !env.MEDIA) return json({ code: 'persistence_unavailable' }, 503);
+  try {
+    await ensureProgressPhotoSchema(env.DB);
+    const rows = await env.DB.prepare('SELECT id, object_key, pose, photo_date, body_weight_kg, note, content_type, byte_size, created_at FROM project75_progress_photos WHERE user_id = ? ORDER BY photo_date DESC, created_at DESC LIMIT 200').bind(userId).all<ProgressPhotoRow>();
+    return json({ photos: rows.results.map(progressPhotoPayload) });
+  } catch { return json({ code: 'persistence_unavailable' }, 503); }
+}
+
+async function uploadProgressPhoto(request: Request, env: Env) {
+  const userId = authenticatedUserId(request);
+  if (!userId) return json({ code: 'auth_required' }, 401);
+  if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+  if (!env.DB || !env.MEDIA) return json({ code: 'persistence_unavailable' }, 503);
+  const contentLength = Number(request.headers.get('content-length') ?? 0);
+  if (contentLength > MAX_PROGRESS_PHOTO_BYTES + 64_000) return json({ code: 'image_too_large' }, 413);
+  let form: FormData;
+  try { form = await request.formData(); } catch { return json({ code: 'invalid_request' }, 400); }
+  const file = form.get('photo');
+  const pose = String(form.get('pose') ?? 'front');
+  const date = String(form.get('date') ?? '');
+  const note = String(form.get('note') ?? '').trim().slice(0, 500);
+  const rawWeight = String(form.get('bodyWeightKg') ?? '').trim();
+  const bodyWeightKg = rawWeight ? Number(rawWeight) : null;
+  if (!(file instanceof File) || file.size <= 0 || file.size > MAX_PROGRESS_PHOTO_BYTES) return json({ code: 'invalid_image' }, 400);
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) return json({ code: 'unsupported_image' }, 415);
+  if (!['front', 'side', 'back'].includes(pose) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return json({ code: 'invalid_request' }, 400);
+  if (bodyWeightKg != null && (!Number.isFinite(bodyWeightKg) || bodyWeightKg < 30 || bodyWeightKg > 300)) return json({ code: 'invalid_request' }, 400);
+  const id = crypto.randomUUID();
+  const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg';
+  const objectKey = `progress-photos/${encodeURIComponent(userId)}/${id}.${extension}`;
+  const createdAt = new Date().toISOString();
+  try {
+    await ensureProgressPhotoSchema(env.DB);
+    await env.MEDIA.put(objectKey, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+    await env.DB.prepare('INSERT INTO project75_progress_photos (id, user_id, object_key, pose, photo_date, body_weight_kg, note, content_type, byte_size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, userId, objectKey, pose, date, bodyWeightKg, note, file.type, file.size, createdAt).run();
+    return json({ photo: progressPhotoPayload({ id, object_key: objectKey, pose: pose as ProgressPhotoRow['pose'], photo_date: date, body_weight_kg: bodyWeightKg, note, content_type: file.type, byte_size: file.size, created_at: createdAt }) }, 201);
+  } catch {
+    await env.MEDIA.delete(objectKey).catch(() => undefined);
+    return json({ code: 'persistence_unavailable' }, 503);
+  }
+}
+
+async function findProgressPhoto(request: Request, env: Env, id: string) {
+  const userId = authenticatedUserId(request);
+  if (!userId) return { response: json({ code: 'auth_required' }, 401), row: null };
+  if (!env.DB || !env.MEDIA) return { response: json({ code: 'persistence_unavailable' }, 503), row: null };
+  await ensureProgressPhotoSchema(env.DB);
+  const row = await env.DB.prepare('SELECT id, object_key, pose, photo_date, body_weight_kg, note, content_type, byte_size, created_at FROM project75_progress_photos WHERE id = ? AND user_id = ? LIMIT 1').bind(id, userId).first<ProgressPhotoRow>();
+  return row ? { response: null, row } : { response: json({ code: 'not_found' }, 404), row: null };
+}
+
+async function getProgressPhotoImage(request: Request, env: Env, id: string) {
+  try {
+    const result = await findProgressPhoto(request, env, id);
+    if (!result.row) return result.response!;
+    const object = await env.MEDIA!.get(result.row.object_key);
+    if (!object) return json({ code: 'not_found' }, 404);
+    return new Response(object.body, { headers: { 'Content-Type': result.row.content_type, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
+  } catch { return json({ code: 'persistence_unavailable' }, 503); }
+}
+
+async function deleteProgressPhoto(request: Request, env: Env, id: string) {
+  if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+  try {
+    const result = await findProgressPhoto(request, env, id);
+    if (!result.row) return result.response!;
+    await env.MEDIA!.delete(result.row.object_key);
+    const userId = authenticatedUserId(request)!;
+    await env.DB!.prepare('DELETE FROM project75_progress_photos WHERE id = ? AND user_id = ?').bind(id, userId).run();
+    return json({ deleted: true });
+  } catch { return json({ code: 'persistence_unavailable' }, 503); }
+}
+
+async function searchFoods(request: Request, env: Env) {
+  if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+  const url = new URL(request.url);
+  const query = (url.searchParams.get('q') ?? '').trim().slice(0, 80);
+  const page = Math.max(1, Math.min(10, Number(url.searchParams.get('page') ?? 1) || 1));
+  if (query.length < 2) return json({ code: 'query_too_short' }, 400);
+  try { return json(await searchExternalFoods(query, page, env)); }
+  catch { return json({ code: 'provider_unavailable' }, 503); }
+}
+
+async function lookupBarcode(request: Request) {
+  if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+  const barcode = decodeURIComponent(new URL(request.url).pathname.split('/').at(-1) ?? '').replace(/\s+/g, '');
+  if (!/^\d{8,14}$/.test(barcode)) return json({ code: 'invalid_barcode' }, 400);
+  try {
+    const food = await lookupExternalBarcode(barcode);
+    return food ? json({ food }) : json({ code: 'not_found' }, 404);
+  } catch { return json({ code: 'provider_unavailable' }, 503); }
+}
+
+/** Deletes every record this app stores for the signed-in user, including photos and Picnic keys. */
+async function deleteAccountData(request: Request, env: Env) {
+  const userId = authenticatedUserId(request);
+  if (!userId) return json({ code: 'auth_required' }, 401);
+  if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+  if (!env.DB) return json({ code: 'persistence_unavailable' }, 503);
+  const project73 = await deleteProject73Data(request, env, {}, userId);
+  if (project73) return project73;
+  await ensureProgressPhotoSchema(env.DB);
+  const photos = await env.DB.prepare('SELECT object_key FROM project75_progress_photos WHERE user_id = ?').bind(userId).all<{ object_key: string }>();
+  for (const photo of photos.results) await env.MEDIA?.delete(photo.object_key).catch(() => undefined);
+  await env.DB.prepare('DELETE FROM project75_progress_photos WHERE user_id = ?').bind(userId).run();
+  await env.DB.prepare(PROJECT75_USER_DATA_SCHEMA).run();
+  await env.DB.prepare('DELETE FROM project75_user_data WHERE user_id = ?').bind(userId).run();
+  return json({ deleted: true });
+}
+
 export default {
   async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
@@ -270,6 +422,24 @@ export default {
       return analyzeScreenshot(request, env);
     }
     if (url.pathname.startsWith('/api/fitdays/')) return json({ code: 'not_found' }, 404);
+    if (url.pathname === '/api/foods/search' && request.method === 'GET') return searchFoods(request, env);
+    if (url.pathname.startsWith('/api/foods/barcode/') && request.method === 'GET') return lookupBarcode(request);
+    if (url.pathname.startsWith('/api/foods/')) return json({ code: 'not_found' }, 404);
+    if (url.pathname === '/api/progress-photos' && request.method === 'GET') return listProgressPhotos(request, env);
+    if (url.pathname === '/api/progress-photos' && request.method === 'POST') return uploadProgressPhoto(request, env);
+    const photoImageMatch = /^\/api\/progress-photos\/([a-f0-9-]+)\/image$/.exec(url.pathname);
+    if (photoImageMatch && request.method === 'GET') return getProgressPhotoImage(request, env, photoImageMatch[1]);
+    const photoMatch = /^\/api\/progress-photos\/([a-f0-9-]+)$/.exec(url.pathname);
+    if (photoMatch && request.method === 'DELETE') return deleteProgressPhoto(request, env, photoMatch[1]);
+    if (url.pathname.startsWith('/api/progress-photos')) return json({ code: 'not_found' }, 404);
+    if (url.pathname === '/api/account' && request.method === 'DELETE') return deleteAccountData(request, env);
+    if (url.pathname === '/api/assistant/status' && request.method === 'GET') return json({ provider: aiProvider(env), model: aiProvider(env) ? env.AI_MODEL ?? null : null });
+    if (url.pathname === '/api/assistant' && request.method === 'POST') {
+      if (!isSameSite(request)) return json({ code: 'forbidden' }, 403);
+      return handleAssistant(request, env, authenticatedUserId(request));
+    }
+    const project73 = await handleProject73(request, env, authenticatedUserId(request));
+    if (project73) return project73;
     return new Response(null, { status: 404 });
   },
 };

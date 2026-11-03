@@ -1,5 +1,5 @@
-import { foodMap } from '../data/foods';
 import { addMacros, entryMacros } from './nutrition';
+import { resolveFood } from './foodCatalog';
 import { currentWeight, goalProgressPercentage, startingWeight, weightHistory } from './bodyMeasurements';
 import { weightTrend } from './progress';
 import { activePlanWeek, datesInWeek, getWeekSnapshot, mondayOf, personalRecordEvents } from './engagement';
@@ -10,8 +10,8 @@ import type { AppData, Macros } from '../types/models';
 
 export function getNutritionTotals(data: AppData, date: string): Macros {
   return addMacros(data.foodLog.filter((entry) => entry.date === date).flatMap((entry) => {
-    const food = foodMap.get(entry.foodId);
-    return food ? [entryMacros(food, entry)] : [];
+    const food = resolveFood(data, entry.foodId);
+    return [entryMacros(food, entry)];
   }));
 }
 

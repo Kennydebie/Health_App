@@ -229,7 +229,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
       >
         <header className="modal-header">
           <div><p className="eyebrow">Project 75</p><h2 id={titleId}>{title}</h2>{subtitle ? <p id={descriptionId}>{subtitle}</p> : null}</div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label={`Close ${title}`}><X size={20} /></button>
+          <button className="icon-button" type="button" onClick={onClose} aria-label={`Sluit ${title}`}><X size={20} /></button>
         </header>
         <div className="modal-body">{children}</div>
         {footer ? <footer className="modal-footer">{footer}</footer> : null}

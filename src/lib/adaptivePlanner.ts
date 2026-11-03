@@ -93,13 +93,20 @@ export function isStrengthTemplate(templateId: SessionTemplateId) {
   return !['cardio_recovery', 'mobility_recovery', 'full_rest'].includes(templateId);
 }
 
+const RECOVERY_NL: Record<RecoveryIndicator, string> = { Ready: 'Hersteld', 'Mostly recovered': 'Grotendeels hersteld', 'Recently trained': 'Recent getraind', 'Recovery recommended': 'Herstel aanbevolen', 'Not enough history': 'Te weinig geschiedenis' };
+
+/** Dutch label for a recovery indicator (the indicator values themselves stay stable identifiers). */
+export function recoveryLabel(indicator: RecoveryIndicator) {
+  return RECOVERY_NL[indicator] ?? indicator;
+}
+
 export function selectionSourceLabel(source: TrainingSelectionSource) {
   const labels: Record<TrainingSelectionSource, string> = {
-    default_template: 'Original plan',
-    adaptive_recommendation: 'Recommended',
-    user_selected: 'Selected by you',
-    user_moved: 'Moved by you',
-    user_swapped: 'Swapped by you',
+    default_template: 'Oorspronkelijk plan',
+    adaptive_recommendation: 'Aanbevolen',
+    user_selected: 'Door jou gekozen',
+    user_moved: 'Door jou verplaatst',
+    user_swapped: 'Door jou gewisseld',
   };
   return labels[source];
 }
@@ -113,16 +120,16 @@ export function workoutDayForSession(program: WorkoutDay[], templateId: SessionT
   const calendarLabel = program.find((day) => day.id === calendarId)?.label ?? calendarId.slice(0, 3);
   const template = workoutTemplate(program, templateId);
   if (template) return { ...template, id: calendarId, label: calendarLabel };
-  if (templateId === 'full_rest') return { id: calendarId, label: calendarLabel, title: 'Full rest day', focus: 'Rest and normal daily movement', duration: 'As needed', isRestDay: true, recovery: ['No workout is required today.', 'Resume the weekly objectives when it suits your schedule.'], exercises: [] };
-  if (templateId === 'mobility_recovery') return { id: calendarId, label: calendarLabel, title: 'Mobility or light recovery', focus: 'Easy movement and mobility', duration: '10–25 min', isRestDay: true, recovery: ['Keep every movement comfortable and easy.', 'Stop or reduce the range if a movement causes pain.'], cardioTargetMinutes: 15, cardioSuggestion: 'Gentle mobility, an easy walk, or another light recovery activity.', exercises: [] };
-  return { id: calendarId, label: calendarLabel, title: 'Cardio + recovery', focus: 'Conversational-pace cardio', duration: '25–40 min', isRestDay: true, recovery: ['Keep the pace recoverable.', 'Avoid hard intervals when your legs are carrying fatigue.'], cardioTargetMinutes: 30, cardioSuggestion: 'Easy walk, bike, or other low-impact cardio at a conversational pace.', exercises: [] };
+  if (templateId === 'full_rest') return { id: calendarId, label: calendarLabel, title: 'Rustdag', focus: 'Rust en gewone dagelijkse beweging', duration: 'Naar behoefte', isRestDay: true, recovery: ['Vandaag hoeft er niet getraind te worden.', 'Pak de weekdoelen weer op wanneer het je uitkomt.'], exercises: [] };
+  if (templateId === 'mobility_recovery') return { id: calendarId, label: calendarLabel, title: 'Mobiliteit of licht herstel', focus: 'Rustige beweging en mobiliteit', duration: '10–25 min', isRestDay: true, recovery: ['Houd elke beweging comfortabel en licht.', 'Stop of beweeg minder ver als iets pijn doet.'], cardioTargetMinutes: 15, cardioSuggestion: 'Gentle mobility, an easy walk, or another light recovery activity.', exercises: [] };
+  return { id: calendarId, label: calendarLabel, title: 'Cardio + herstel', focus: 'Cardio op praattempo', duration: '25–40 min', isRestDay: true, recovery: ['Houd het tempo rustig.', 'Vermijd zware intervallen als je benen moe zijn.'], cardioTargetMinutes: 30, cardioSuggestion: 'Rustig wandelen, fietsen of andere lichte cardio op praattempo.', exercises: [] };
 }
 
 export function sessionOption(program: WorkoutDay[], templateId: SessionTemplateId): SessionOptionSummary {
   const virtual: Record<'cardio_recovery' | 'mobility_recovery' | 'full_rest', SessionOptionSummary> = {
-    cardio_recovery: { id: 'cardio_recovery', name: 'Cardio + recovery', muscleGroups: [], duration: '25–40 min', type: 'cardio' },
-    mobility_recovery: { id: 'mobility_recovery', name: 'Mobility or light recovery', muscleGroups: [], duration: '10–25 min', type: 'mobility' },
-    full_rest: { id: 'full_rest', name: 'Full rest day', muscleGroups: [], duration: 'As needed', type: 'rest' },
+    cardio_recovery: { id: 'cardio_recovery', name: 'Cardio + herstel', muscleGroups: [], duration: '25–40 min', type: 'cardio' },
+    mobility_recovery: { id: 'mobility_recovery', name: 'Mobiliteit of licht herstel', muscleGroups: [], duration: '10–25 min', type: 'mobility' },
+    full_rest: { id: 'full_rest', name: 'Rustdag', muscleGroups: [], duration: 'Naar behoefte', type: 'rest' },
   };
   if (templateId === 'cardio_recovery' || templateId === 'mobility_recovery' || templateId === 'full_rest') return virtual[templateId];
   const day = workoutTemplate(program, templateId);
@@ -132,13 +139,13 @@ export function sessionOption(program: WorkoutDay[], templateId: SessionTemplate
   }) ?? [];
   const type = sessionType(templateId);
   const labels: Partial<Record<WorkoutId, string>> = {
-    upper_a: 'Chest, back & arms',
-    upper_b: 'Shoulders, back & arms',
-    lower_a: 'Legs · Squat & hamstrings',
-    lower_b: 'Legs · Glutes & hamstrings',
+    upper_a: 'Borst, rug & armen',
+    upper_b: 'Schouders, rug & armen',
+    lower_a: 'Benen · squat & hamstrings',
+    lower_b: 'Benen · bilspieren & hamstrings',
     full_body_a: 'Full body 1', full_body_b: 'Full body 2', full_body_c: 'Full body 3',
   };
-  return { id: templateId, name: labels[templateId as WorkoutId] ?? day?.title ?? 'Saved workout', muscleGroups: [...new Set(muscles)], duration: day?.duration ?? '60–75 min', type };
+  return { id: templateId, name: labels[templateId as WorkoutId] ?? day?.title ?? 'Opgeslagen training', muscleGroups: [...new Set(muscles)], duration: day?.duration ?? '60–75 min', type };
 }
 
 export function availableSessionOptions(program: WorkoutDay[]) {
@@ -280,7 +287,7 @@ function adjacentPlanPenalty(data: Pick<AppData, 'program' | 'trainingPlanner'>,
 
 export function recommendSession(data: Pick<AppData, 'program' | 'sessions' | 'cardioLog' | 'weeklyCardioTarget' | 'trainingPlanner'>, date: string, now = new Date()): SessionRecommendation {
   const active = [...data.sessions].reverse().find((session) => !session.completedAt);
-  if (active && active.date === date) return { templateId: active.workoutId, reason: `Resume ${sessionOption(data.program, active.workoutId).name}; it is already in progress.`, recoveryIndicator: 'Ready', supportsRemainingTargets: true };
+  if (active && active.date === date) return { templateId: active.workoutId, reason: `Hervat ${sessionOption(data.program, active.workoutId).name}; die is al begonnen.`, recoveryIndicator: 'Ready', supportsRemainingTargets: true };
   const counts = completedCounts(data, date);
   const targets = data.trainingPlanner.weeklyTargets;
   const remaining = { upper: Math.max(0, targets.upperSessions - counts.upper), lower: Math.max(0, targets.lowerSessions - counts.lower), strength: Math.max(0, targets.strengthSessions - counts.strength) };
@@ -292,16 +299,16 @@ export function recommendSession(data: Pick<AppData, 'program' | 'sessions' | 'c
   const scheduledConsecutive = scheduledStrengthDaysBefore(data, date, now);
   const readiness = data.trainingPlanner.dailyPlans.find((plan) => plan.date === date)?.readinessResponse;
 
-  if (readiness?.jointDiscomfort === 'significant') return { templateId: 'mobility_recovery', reason: 'You reported significant joint discomfort. Choose recovery and stop for sharp pain, dizziness or instability. This is not a diagnosis.', recoveryIndicator: 'Recovery recommended', supportsRemainingTargets: true };
-  if (readiness && (readiness.energy <= 2 || readiness.muscleSoreness >= 4 || readiness.availableMinutes < 20)) return { templateId: 'mobility_recovery', reason: `Recovery is recommended based on your check-in: ${readiness.energy}/5 energy, ${readiness.muscleSoreness}/5 soreness and ${readiness.availableMinutes} minutes available.`, recoveryIndicator: 'Recovery recommended', supportsRemainingTargets: true };
+  if (readiness?.jointDiscomfort === 'significant') return { templateId: 'mobility_recovery', reason: 'Je meldt flinke gewrichtsklachten. Kies herstel en stop bij scherpe pijn, duizeligheid of instabiliteit. Dit is geen diagnose.', recoveryIndicator: 'Recovery recommended', supportsRemainingTargets: true };
+  if (readiness && (readiness.energy <= 2 || readiness.muscleSoreness >= 4 || readiness.availableMinutes < 20)) return { templateId: 'mobility_recovery', reason: `Herstel aanbevolen op basis van je check: energie ${readiness.energy}/5, spierpijn ${readiness.muscleSoreness}/5 en ${readiness.availableMinutes} minuten beschikbaar.`, recoveryIndicator: 'Recovery recommended', supportsRemainingTargets: true };
 
-  if (consecutive >= 3) return { templateId: 'mobility_recovery', reason: `Recovery is recommended after ${consecutive} consecutive strength days.`, recoveryIndicator: 'Recovery recommended', supportsRemainingTargets: true };
-  if (scheduledConsecutive >= 3) return { templateId: 'mobility_recovery', reason: `Recovery is recommended because ${scheduledConsecutive} consecutive strength days are already completed or selected.`, recoveryIndicator: 'Recovery recommended', supportsRemainingTargets: true };
+  if (consecutive >= 3) return { templateId: 'mobility_recovery', reason: `Herstel aanbevolen na ${consecutive} krachtdagen op rij.`, recoveryIndicator: 'Recovery recommended', supportsRemainingTargets: true };
+  if (scheduledConsecutive >= 3) return { templateId: 'mobility_recovery', reason: `Herstel aanbevolen: er staan al ${scheduledConsecutive} krachtdagen op rij gepland of gedaan.`, recoveryIndicator: 'Recovery recommended', supportsRemainingTargets: true };
 
   if (scheduledStrength >= remaining.strength) {
     const recoveryId = cardioMinutes < data.weeklyCardioTarget ? defaultId : 'mobility_recovery';
     const safeRecoveryId = isStrengthTemplate(recoveryId) ? (cardioMinutes < data.weeklyCardioTarget ? 'cardio_recovery' : 'mobility_recovery') : recoveryId;
-    return { templateId: safeRecoveryId, reason: cardioMinutes < data.weeklyCardioTarget ? `${Math.max(0, data.weeklyCardioTarget - cardioMinutes)} cardio minutes remain. The remaining strength workouts are already scheduled on other days.` : 'The remaining strength workouts are already scheduled on other days. Recovery is recommended here.', recoveryIndicator: 'Ready', supportsRemainingTargets: true };
+    return { templateId: safeRecoveryId, reason: cardioMinutes < data.weeklyCardioTarget ? `${Math.max(0, data.weeklyCardioTarget - cardioMinutes)} cardio minutes remain. The remaining strength workouts are already scheduled on other days.` : 'De overige krachttrainingen staan al op andere dagen. Hier is herstel aanbevolen.', recoveryIndicator: 'Ready', supportsRemainingTargets: true };
   }
 
   const candidates = availableSessionOptions(data.program).filter((option) => isStrengthTemplate(option.id) && (remaining[option.type === 'upper' ? 'upper' : option.type === 'lower' ? 'lower' : 'strength'] > 0 || remaining.strength > 0));
@@ -317,19 +324,19 @@ export function recommendSession(data: Pick<AppData, 'program' | 'sessions' | 'c
   const best = scored[0];
   if (best && remaining.strength > 0) {
     const daysSince = best.recovery.minimumHours == null ? null : Math.floor(best.recovery.minimumHours / 24);
-    const category = best.option.type === 'upper' ? 'upper-body' : best.option.type === 'lower' ? 'lower-body' : 'strength';
+    const category = best.option.type === 'upper' ? 'bovenlichaam' : best.option.type === 'lower' ? 'benen' : 'kracht';
     const count = Math.max(1, best.option.type === 'upper' ? remaining.upper : best.option.type === 'lower' ? remaining.lower : remaining.strength);
-    const targetText = `${count} ${category} workout${count === 1 ? '' : 's'} remain${count === 1 ? 's' : ''} this week.`;
+    const targetText = `nog ${count} ${count === 1 ? 'training' : 'trainingen'} ${category} deze week.`;
     const recoveryText = best.recovery.indicator === 'Not enough history'
-      ? 'More workout history is needed to estimate recovery.'
+      ? 'Meer trainingsgeschiedenis nodig om herstel in te schatten.'
       : best.recovery.indicator === 'Ready'
-        ? `The main muscles have had ${daysSince ?? 0} recovery day${daysSince === 1 ? '' : 's'}.`
-        : `Recovery status: ${best.recovery.indicator.toLowerCase()}.`;
-    return { templateId: best.option.id, reason: `Recommended because ${targetText} ${recoveryText}`, recoveryIndicator: best.recovery.indicator, supportsRemainingTargets: true };
+        ? `De belangrijkste spieren hadden ${daysSince ?? 0} ${daysSince === 1 ? 'hersteldag' : 'hersteldagen'}.`
+        : `Herstelstatus: ${recoveryLabel(best.recovery.indicator).toLowerCase()}.`;
+    return { templateId: best.option.id, reason: `Aanbevolen: ${targetText} ${recoveryText}`, recoveryIndicator: best.recovery.indicator, supportsRemainingTargets: true };
   }
 
   if (cardioMinutes < data.weeklyCardioTarget) return { templateId: 'cardio_recovery', reason: `${Math.max(0, data.weeklyCardioTarget - cardioMinutes)} cardio minutes remain and your weekly strength target is already covered.`, recoveryIndicator: 'Ready', supportsRemainingTargets: true };
-  return { templateId: defaultOption.type === 'rest' ? 'full_rest' : 'mobility_recovery', reason: 'Weekly strength and cardio targets are complete. Recovery is recommended.', recoveryIndicator: 'Ready', supportsRemainingTargets: true };
+  return { templateId: defaultOption.type === 'rest' ? 'full_rest' : 'mobility_recovery', reason: 'Kracht- en cardiodoelen voor deze week zijn gehaald. Herstel is aanbevolen.', recoveryIndicator: 'Ready', supportsRemainingTargets: true };
 }
 
 function isExplicitSource(source: TrainingSelectionSource) {
@@ -429,19 +436,19 @@ export function plannerWarnings(data: AppData, date: string, templateId: Session
   const warnings: PlannerWarning[] = [];
   const option = sessionOption(data.program, templateId);
   const active = [...data.sessions].reverse().find((session) => !session.completedAt);
-  if (active) warnings.push({ code: 'active_workout', tone: 'strong', title: 'Workout already in progress', message: `You have an unfinished ${sessionOption(data.program, active.workoutId).name} workout. Resume it, discard it or start another workout.` });
+  if (active) warnings.push({ code: 'active_workout', tone: 'strong', title: 'Training al bezig', message: `Je hebt een onafgemaakte training (${sessionOption(data.program, active.workoutId).name}). Hervat, verwijder of start een andere.` });
   const duplicate = isStrengthTemplate(templateId) && data.sessions.some((session) => session.completedAt && session.date === date && session.workoutId === templateId);
-  if (duplicate) warnings.push({ code: 'duplicate_session', tone: 'strong', title: 'Exact session already completed today', message: `You already completed ${option.name} today. Starting it again creates a second workout and additional volume for the same muscle groups; the first workout will remain preserved.` });
+  if (duplicate) warnings.push({ code: 'duplicate_session', tone: 'strong', title: 'Deze training is vandaag al gedaan', message: `Je deed vandaag al ${option.name}. Opnieuw starten maakt een tweede training met extra volume voor dezelfde spieren; de eerste blijft bewaard.` });
   const recovery = recoveryForSession(data, templateId, date, now);
   if (recovery.indicator === 'Recovery recommended' || recovery.indicator === 'Recently trained') {
     const groups = recovery.recentGroups.join(', ');
-    warnings.push({ code: 'recent_muscles', tone: recovery.indicator === 'Recovery recommended' ? 'strong' : 'caution', title: 'Some muscles may still be recovering', message: `You recently trained ${groups || 'overlapping muscle groups'}. Repeating a hard ${option.type === 'upper' ? 'upper-body' : option.type === 'lower' ? 'lower-body' : 'strength'} session today may reduce workout quality.` });
+    warnings.push({ code: 'recent_muscles', tone: recovery.indicator === 'Recovery recommended' ? 'strong' : 'caution', title: 'Sommige spieren herstellen misschien nog', message: `Je trainde onlangs ${groups || 'dezelfde spiergroepen'}. Vandaag weer een zware ${option.type === 'upper' ? 'bovenlichaam' : option.type === 'lower' ? 'benen' : 'kracht'}training kan de kwaliteit verlagen.` });
   }
   const consecutive = strengthDaysBefore(data.sessions, date);
-  if (isStrengthTemplate(templateId) && consecutive >= 3) warnings.push({ code: 'consecutive_strength', tone: 'caution', title: 'Several consecutive strength days', message: `You have completed ${consecutive} strength sessions on consecutive days. A lighter or recovery-focused day may help manage fatigue.` });
+  if (isStrengthTemplate(templateId) && consecutive >= 3) warnings.push({ code: 'consecutive_strength', tone: 'caution', title: 'Meerdere krachtdagen op rij', message: `Je deed ${consecutive} krachttrainingen op rij. Een lichtere dag of hersteldag helpt tegen vermoeidheid.` });
   if (templateId === 'cardio_recovery' && readiness?.preferredIntensity === 'hard') {
     const recentLower = data.sessions.some((session) => session.completedAt && sessionType(session.workoutId) === 'lower' && session.date >= shiftDate(date, -1) && session.date <= date);
-    if (recentLower) warnings.push({ code: 'hard_cardio_after_lower', tone: 'caution', title: 'Hard cardio may conflict with leg recovery', message: 'A demanding lower-body workout was completed recently. Easy walking or gentle cycling is less likely to compete with leg recovery than hard running intervals.' });
+    if (recentLower) warnings.push({ code: 'hard_cardio_after_lower', tone: 'caution', title: 'Zware cardio kan botsen met herstel van je benen', message: 'Je deed onlangs een zware beentraining. Rustig wandelen of fietsen belast je benen minder dan hardloopintervallen.' });
   }
   return warnings;
 }
