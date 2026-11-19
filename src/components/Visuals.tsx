@@ -12,8 +12,8 @@ export function MacroMeter({ label, value, target, unit = 'g', tone }: { label: 
   const remaining = Math.max(0, target - value);
   return <div className={`macro-meter tone-${tone}`}>
     <div><span>{label}</span><strong>{Math.round(value)}<small> / {target}{unit}</small></strong></div>
-    <div className="macro-meter__track" role="progressbar" aria-label={`${label}: ${Math.round(value)} of ${target} ${unit}`} aria-valuemin={0} aria-valuemax={target} aria-valuenow={Math.round(value)}><span style={{ width: `${percent}%` }} /></div>
-    <small>{remaining > 0 ? `${Math.round(remaining)} ${unit} remaining` : 'Target reached'}</small>
+    <div className="macro-meter__track" role="progressbar" aria-label={`${label}: ${Math.round(value)} van ${target} ${unit}`} aria-valuemin={0} aria-valuemax={target} aria-valuenow={Math.round(value)}><span style={{ width: `${percent}%` }} /></div>
+    <small>{remaining > 0 ? `nog ${Math.round(remaining)} ${unit}` : 'Doel bereikt'}</small>
   </div>;
 }
 
@@ -23,22 +23,22 @@ export interface WeekStripItem {
   status: 'workout' | 'nutrition' | 'cardio' | 'recovery' | 'upcoming' | 'mixed';
   complete?: boolean;
   today?: boolean;
-  stateLabel?: 'Completed' | 'Today' | 'Upcoming' | 'Skipped' | 'Missed' | 'Not scheduled';
+  stateLabel?: 'Voltooid' | 'Vandaag' | 'Gepland' | 'Overgeslagen' | 'Gemist' | 'Niet gepland';
 }
 
 const weekIcons = { workout: Dumbbell, nutrition: Utensils, cardio: HeartPulse, recovery: MoonStar, upcoming: MoonStar, mixed: Check };
 
 export function WeekStrip({ items }: { items: WeekStripItem[] }) {
-  return <div className="week-strip" aria-label="Weekly consistency">
+  return <div className="week-strip" aria-label="Weekritme">
     {items.map((item) => {
       const Icon = weekIcons[item.status];
       return <div className={`week-strip__day ${item.status} ${item.complete ? 'complete' : ''} ${item.today ? 'today' : ''}`} key={item.date} title={`${item.day}: ${item.stateLabel ?? item.status}`}>
-        <span>{item.day.slice(0, 1)}</span><i><Icon size={14} /></i><small>{item.stateLabel ?? (item.today ? 'Today' : item.complete ? 'Done' : item.status === 'upcoming' ? 'Next' : item.status)}</small>
+        <span>{item.day.slice(0, 1)}</span><i><Icon size={14} /></i><small>{item.stateLabel ?? (item.today ? 'Vandaag' : item.complete ? 'Klaar' : item.status === 'upcoming' ? 'Volgende' : item.status)}</small>
       </div>;
     })}
   </div>;
 }
 
 export function PageSkeleton() {
-  return <div className="page page-skeleton" aria-label="Loading page"><div className="skeleton-line wide" /><div className="skeleton-line" /><div className="skeleton-grid"><span /><span /><span /></div></div>;
+  return <div className="page page-skeleton" aria-label="Pagina laden"><div className="skeleton-line wide" /><div className="skeleton-line" /><div className="skeleton-grid"><span /><span /><span /></div></div>;
 }

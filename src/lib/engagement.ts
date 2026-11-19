@@ -5,20 +5,20 @@ import { isStrengthTemplate, workoutDayForSession } from './adaptivePlanner';
 import type { AppData, BodyMeasurement, WorkoutDay, WorkoutId, WorkoutSession } from '../types/models';
 
 const workoutDisplayNames: Partial<Record<WorkoutId, string>> = {
-  upper_a: 'Chest, back & arms',
-  lower_a: 'Legs · Squat & Hamstrings',
-  upper_b: 'Shoulders, back & arms',
-  lower_b: 'Legs · Glutes & Hamstrings',
+  upper_a: 'Borst, rug & armen',
+  lower_a: 'Benen · squat & hamstrings',
+  upper_b: 'Schouders, rug & armen',
+  lower_b: 'Benen · bilspieren & hamstrings',
   full_body_a: 'Full body 1',
   full_body_b: 'Full body 2',
   full_body_c: 'Full body 3',
 };
 
 const legacyDayDisplayNames: Partial<Record<WorkoutDay['id'], string>> = {
-  monday: 'Chest, back & arms',
-  tuesday: 'Legs · Squat & Hamstrings',
-  thursday: 'Shoulders, back & arms',
-  saturday: 'Legs · Glutes & Hamstrings',
+  monday: 'Borst, rug & armen',
+  tuesday: 'Benen · squat & hamstrings',
+  thursday: 'Schouders, rug & armen',
+  saturday: 'Benen · bilspieren & hamstrings',
 };
 
 export function displayWorkoutTitle(day: Pick<WorkoutDay, 'id' | 'title'> & { workoutId?: WorkoutId }): string {

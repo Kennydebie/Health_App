@@ -10,6 +10,7 @@ export interface D1PreparedStatement {
   bind(...values: unknown[]): D1PreparedStatement;
   first<T>(): Promise<T | null>;
   run(): Promise<D1Result>;
+  all<T>(): Promise<{ results: T[] }>;
 }
 
 export interface D1Database {

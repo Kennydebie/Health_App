@@ -10,7 +10,7 @@ export interface Project75Backup {
   exportedAt: string;
   appDataVersion: number;
   profile: AppData['profile'];
-  settings: Pick<AppData, 'nutritionSettings' | 'bodyGoals' | 'weeklyCardioTarget' | 'squatProgression'>;
+  settings: Pick<AppData, 'nutritionSettings' | 'bodyGoals' | 'weeklyCardioTarget' | 'squatProgression' | 'exerciseRestPreferences'>;
   nutritionEntries: AppData['foodLog'];
   nutritionTargetHistory: AppData['nutritionTargetHistory'];
   nutritionDayRecords: AppData['nutritionDayRecords'];
@@ -26,6 +26,17 @@ export interface Project75Backup {
   habits: AppData['habits'];
   cardioLog: AppData['cardioLog'];
   progressionPlans: AppData['progressionPlans'];
+  coaching?: Pick<AppData, 'activeGoal' | 'coachingSettings' | 'onboardingCompleted'>;
+  activityLog?: AppData['activityLog'];
+  plannedFoodEntries?: AppData['plannedFoodEntries'];
+  calorieReservations?: AppData['calorieReservations'];
+  dayTemplates?: AppData['dayTemplates'];
+  recoveryFeedback?: AppData['recoveryFeedback'];
+  pausePeriods?: AppData['pausePeriods'];
+  weeklyCheckIns?: AppData['weeklyCheckIns'];
+  coachRecommendations?: AppData['coachRecommendations'];
+  planChanges?: AppData['planChanges'];
+  productEvents?: AppData['productEvents'];
 }
 
 export interface BackupPreview extends DataSummary {
@@ -48,11 +59,12 @@ export function createBackup(data: AppData, now = new Date().toISOString()): Pro
       bodyGoals: data.bodyGoals,
       weeklyCardioTarget: data.weeklyCardioTarget,
       squatProgression: data.squatProgression,
+      exerciseRestPreferences: data.exerciseRestPreferences,
     },
     nutritionEntries: data.foodLog,
     nutritionTargetHistory: data.nutritionTargetHistory,
     nutritionDayRecords: data.nutritionDayRecords,
-    customFoods: [],
+    customFoods: data.foodLibrary,
     favorites: data.favorites,
     recentFoodIds: data.recentFoodIds,
     savedMeals: data.savedMeals,
@@ -64,6 +76,17 @@ export function createBackup(data: AppData, now = new Date().toISOString()): Pro
     habits: data.habits,
     cardioLog: data.cardioLog,
     progressionPlans: data.progressionPlans,
+    coaching: { activeGoal: data.activeGoal, coachingSettings: data.coachingSettings, onboardingCompleted: data.onboardingCompleted },
+    activityLog: data.activityLog,
+    plannedFoodEntries: data.plannedFoodEntries,
+    calorieReservations: data.calorieReservations,
+    dayTemplates: data.dayTemplates,
+    recoveryFeedback: data.recoveryFeedback,
+    pausePeriods: data.pausePeriods,
+    weeklyCheckIns: data.weeklyCheckIns,
+    coachRecommendations: data.coachRecommendations,
+    planChanges: data.planChanges,
+    productEvents: data.productEvents,
   };
 }
 
@@ -77,12 +100,14 @@ export function backupToAppData(backup: Project75Backup): AppData {
     bodyGoals: backup.settings.bodyGoals,
     weeklyCardioTarget: backup.settings.weeklyCardioTarget,
     squatProgression: backup.settings.squatProgression,
+    exerciseRestPreferences: backup.settings.exerciseRestPreferences ?? {},
     foodLog: backup.nutritionEntries,
     nutritionTargetHistory: backup.nutritionTargetHistory,
     nutritionDayRecords: backup.nutritionDayRecords,
     favorites: backup.favorites,
     recentFoodIds: backup.recentFoodIds,
     savedMeals: backup.savedMeals,
+    foodLibrary: backup.customFoods ?? [],
     sessions: backup.workouts,
     program: backup.workoutTemplates,
     trainingPlanner: backup.trainingPlanner,
@@ -91,6 +116,19 @@ export function backupToAppData(backup: Project75Backup): AppData {
     habits: backup.habits,
     cardioLog: backup.cardioLog,
     progressionPlans: backup.progressionPlans,
+    activeGoal: backup.coaching?.activeGoal ?? initial.activeGoal,
+    coachingSettings: backup.coaching?.coachingSettings ?? initial.coachingSettings,
+    onboardingCompleted: backup.coaching?.onboardingCompleted ?? true,
+    activityLog: backup.activityLog ?? [],
+    plannedFoodEntries: backup.plannedFoodEntries ?? [],
+    calorieReservations: backup.calorieReservations ?? [],
+    dayTemplates: backup.dayTemplates ?? [],
+    recoveryFeedback: backup.recoveryFeedback ?? [],
+    pausePeriods: backup.pausePeriods ?? [],
+    weeklyCheckIns: backup.weeklyCheckIns ?? [],
+    coachRecommendations: backup.coachRecommendations ?? [],
+    planChanges: backup.planChanges ?? [],
+    productEvents: backup.productEvents ?? [],
   });
 }
 

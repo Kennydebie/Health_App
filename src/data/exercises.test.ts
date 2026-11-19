@@ -35,10 +35,13 @@ describe('revised weekly training schedule', () => {
     expect(exercises.every((exercise) => exercise.movementPatterns && exercise.requiredEquipment.length && exercise.defaultPrescription.sets > 0)).toBe(true);
     expect(exercises).toHaveLength(27);
     expect(Object.keys(EXERCISE_VIDEOS).sort()).toEqual(exercises.map((exercise) => exercise.id).sort());
-    expect(exercises.filter((exercise) => exercise.video.status === 'verified')).toHaveLength(23);
-    expect(exercises.filter((exercise) => exercise.video.status === 'missing').map((exercise) => exercise.id).sort()).toEqual(['assisted-squat', 'supported-goblet-squat', 'supported-reverse-lunge', 'supported-split-squat']);
+    expect(exercises.filter((exercise) => exercise.video.status === 'verified')).toHaveLength(27);
+    expect(exercises.filter((exercise) => exercise.video.status === 'missing')).toEqual([]);
+    expect(Object.fromEntries(['assisted-squat', 'supported-goblet-squat', 'supported-reverse-lunge', 'supported-split-squat'].map((id) => { const video = exercises.find((exercise) => exercise.id === id)!.video; return [id, video.status === 'verified' ? video.sourceId : null]; }))).toEqual({
+      'assisted-squat': 'R4q_G-qb6jM', 'supported-goblet-squat': '6mf0oa2GGUc', 'supported-reverse-lunge': '7r4VC2pBc7I', 'supported-split-squat': 'vUikQQsXCbg',
+    });
     expect(exercises.every((exercise) => exercise.video.status === 'missing' || (/^[\w-]{11}$/.test(exercise.video.sourceId) && exercise.video.embedUrl === `https://www.youtube-nocookie.com/embed/${exercise.video.sourceId}?rel=0` && !exercise.video.embedUrl.includes('autoplay')))).toBe(true);
-    expect(exercises.every((exercise) => exercise.video.status === 'missing' || (exercise.video.title.length > 5 && exercise.video.sourceName.length > 2 && exercise.video.lastReviewed === '2026-08-21'))).toBe(true);
+    expect(exercises.every((exercise) => exercise.video.status === 'missing' || (exercise.video.title.length > 5 && exercise.video.sourceName.length > 2 && exercise.video.lastReviewed === '2026-08-22'))).toBe(true);
     expect(exercises.every((exercise) => exercise.videoFallback.length > 30 && exercise.setup.length && exercise.execution.length && exercise.safety.length)).toBe(true);
     expect(exercises.every((exercise) => exercise.muscleMap.primary.length > 0 && exercise.muscleMap.preferredView)).toBe(true);
   });

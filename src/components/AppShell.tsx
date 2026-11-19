@@ -1,43 +1,42 @@
 import type { ReactNode } from 'react';
-import { Apple, ChartNoAxesCombined, Dumbbell, House, Settings2, Sparkles } from 'lucide-react';
+import { ChartNoAxesCombined, House, Settings2, ShoppingBasket, Sparkles, UtensilsCrossed } from 'lucide-react';
 
-export type Page = 'home' | 'food' | 'workout' | 'progress' | 'profile';
+export type Page = 'dashboard' | 'plan' | 'shopping' | 'progress' | 'settings';
 
 interface AppShellProps {
   page: Page;
   setPage: (page: Page) => void;
   children: ReactNode;
   name: string;
-  planWeek: number;
-  trainingStreak: number;
+  subtitle: string;
 }
 
 const navItems = [
-  { id: 'home' as const, label: 'Home', Icon: House },
-  { id: 'food' as const, label: 'Nutrition', Icon: Apple },
-  { id: 'workout' as const, label: 'Workout', Icon: Dumbbell },
-  { id: 'progress' as const, label: 'Progress', Icon: ChartNoAxesCombined },
-  { id: 'profile' as const, label: 'Profile', Icon: Settings2 },
+  { id: 'dashboard' as const, label: 'Dashboard', short: 'Vandaag', Icon: House },
+  { id: 'plan' as const, label: 'Mijn voedingsplan', short: 'Plan', Icon: UtensilsCrossed },
+  { id: 'shopping' as const, label: 'Boodschappen', short: 'Boodschap', Icon: ShoppingBasket },
+  { id: 'progress' as const, label: 'Mijn voortgang', short: 'Voortgang', Icon: ChartNoAxesCombined },
+  { id: 'settings' as const, label: 'Instellingen', short: 'Instellen', Icon: Settings2 },
 ];
 
-export function AppShell({ page, setPage, children, name, planWeek, trainingStreak }: AppShellProps) {
+export function AppShell({ page, setPage, children, name, subtitle }: AppShellProps) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <button className="brand" type="button" onClick={() => setPage('home')} aria-label="Go home">
-          <span className="brand-mark"><Sparkles size={18} /></span><span><strong>PROJECT</strong> 75</span>
+        <button className="brand" type="button" onClick={() => setPage('dashboard')} aria-label="Naar dashboard">
+          <span className="brand-mark"><Sparkles size={18} /></span><span><strong>PROJECT</strong> 73</span>
         </button>
-        <nav aria-label="Primary navigation">
-          {navItems.map(({ id, label, Icon }) => <button key={id} type="button" data-page={id} aria-label={label} aria-current={page === id ? 'page' : undefined} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon size={20} /><span>{label}</span></button>)}
+        <nav aria-label="Hoofdnavigatie">
+          {navItems.map(({ id, label, Icon }) => <button key={id} type="button" data-page={id} aria-current={page === id ? 'page' : undefined} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon size={20} /><span>{label}</span></button>)}
         </nav>
         <div className="sidebar-coach">
           <div className="avatar">{name.charAt(0).toUpperCase()}</div>
-          <div><span>Week {planWeek} · {trainingStreak} week streak</span><strong>{name}</strong></div>
+          <div><span>{subtitle}</span><strong>{name}</strong></div>
         </div>
       </aside>
       <main className="main-content">{children}</main>
-      <nav className="bottom-nav" aria-label="Mobile primary navigation">
-        {navItems.map(({ id, label, Icon }) => <button key={id} type="button" data-page={id} aria-label={label} aria-current={page === id ? 'page' : undefined} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon size={21} /><span>{label}</span></button>)}
+      <nav className="bottom-nav" aria-label="Hoofdnavigatie mobiel">
+        {navItems.map(({ id, label, short, Icon }) => <button key={id} type="button" data-page={id} aria-label={label} aria-current={page === id ? 'page' : undefined} className={page === id ? 'active' : ''} onClick={() => setPage(id)}><Icon size={21} /><span>{short}</span></button>)}
       </nav>
     </div>
   );

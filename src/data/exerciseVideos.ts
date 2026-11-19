@@ -1,6 +1,6 @@
 import type { ExerciseVideo } from '../types/models';
 
-const reviewed = '2026-08-21';
+const reviewed = '2026-08-22';
 const youtube = (sourceId: string, title: string, sourceName: string, sourceChannelUrl: string): ExerciseVideo => ({
   status: 'verified',
   provider: 'youtube',
@@ -12,10 +12,6 @@ const youtube = (sourceId: string, title: string, sourceName: string, sourceChan
   sourceChannelUrl,
   lastReviewed: reviewed,
   exactMatch: true,
-});
-
-const missing = (reason: string, rejectedCandidates?: NonNullable<Extract<ExerciseVideo, { status: 'missing' }>['rejectedCandidates']>): ExerciseVideo => ({
-  status: 'missing', provider: 'youtube', lastReviewed: reviewed, exactMatch: false, reason, rejectedCandidates,
 });
 
 export const EXERCISE_VIDEOS: Record<string, ExerciseVideo> = {
@@ -35,15 +31,12 @@ export const EXERCISE_VIDEOS: Record<string, ExerciseVideo> = {
   'db-pullover': youtube('moKuOuFNBDM', 'Dumbbell Pullover Guide | How To, Muscles Worked, Mistakes', 'BarBend', 'https://www.youtube.com/@Barbend'),
   'rear-delt-fly': youtube('nlkF7_2O_Lw', 'How To Do A Rear Delt Fly', 'PureGym', 'https://www.youtube.com/@PureGymVideo'),
   'hammer-curl': youtube('TwD-YGVP4Bk', 'How to Do a Hammer Curl | Arm Workout', 'Howcast', 'https://www.youtube.com/@howcast'),
-  'assisted-squat': missing('No exact video was found for the app’s two-hand, fixed-support bodyweight squat.', [
-    { sourceUrl: 'https://www.youtube.com/watch?v=_XKpkDpdq-8', title: 'How to perform an assisted squat', reason: 'Uses a yoga band rather than the fixed support described in Project 75.' },
-    { sourceUrl: 'https://www.youtube.com/watch?v=Pegw_SbLYVc', title: 'How To Perform The Assisted Squat (TRX Squat)', reason: 'Requires suspension straps and changes the setup and assistance mechanics.' },
-  ]),
+  'assisted-squat': youtube('R4q_G-qb6jM', 'Assisted Squat Demonstration', 'User-selected YouTube demonstration', 'https://www.youtube.com'),
   'box-squat': youtube('5Qb9ZnsnQ2s', 'Goblet Box Squat', 'Jason Brown', 'https://www.youtube.com/@jasonbrowntraining'),
-  'supported-goblet-squat': missing('No exact, reputable embed was found for a one-hand-supported dumbbell goblet squat.'),
+  'supported-goblet-squat': youtube('6mf0oa2GGUc', 'Goblet Squat Demonstration', 'User-selected YouTube demonstration', 'https://www.youtube.com'),
   'goblet-squat': youtube('nfX7IFK9UNI', 'How to do a Goblet Squat | Proper Form & Technique | NASM', 'National Academy of Sports Medicine (NASM)', 'https://www.youtube.com/@NasmOrgPersonalTrainer'),
-  'supported-reverse-lunge': missing('No exact, reputable embed was found for a bodyweight reverse lunge using a stable support only for balance.'),
-  'supported-split-squat': missing('No exact, reputable embed was found for the app’s rear-foot-down split squat using a stable support only for balance.'),
+  'supported-reverse-lunge': youtube('7r4VC2pBc7I', 'Reverse Lunge Demonstration', 'User-selected YouTube demonstration', 'https://www.youtube.com'),
+  'supported-split-squat': youtube('vUikQQsXCbg', 'Split Squat Demonstration', 'User-selected YouTube demonstration', 'https://www.youtube.com'),
   'split-squat': youtube('hPC8-z6QXco', 'Split Squat Exercise Variations', 'E3 Rehab', 'https://www.youtube.com/@E3Rehab'),
   'bulgarian-split-squat': youtube('2C-uNgKwPLE', 'How To: Bulgarian Split Squat', 'ScottHermanFitness', 'https://www.youtube.com/@ScottHermanFitness'),
   'sliding-hamstring-curl': youtube('UaecXxAgsKA', 'Sliding Hamstring Curl', 'Theory of Motion Exercise Library', 'https://www.youtube.com/@theorylibrary'),

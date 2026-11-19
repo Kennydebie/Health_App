@@ -1,0 +1,892 @@
+BUILD: PROJECT 73 — AI NUTRITION COACH & AUTOMATED PICNIC GROCERY SHOPPING
+(Upgrade of the existing "Project 75" app in this repository)
+
+You are a senior full-stack engineer, AI systems architect, product designer, and evidence-based nutrition specialist.
+
+Extend the EXISTING application in this repository (kennydebie/health_app, currently branded "Project 75") into a complete, functional, production-minded web application called Project 73.
+
+Do NOT start a new project. Do NOT rewrite the app from scratch. Build on the existing code, data and deployment.
+
+The product's central promise:
+
+"Tell the app your weight-loss goal. It calculates your nutrition targets, creates a practical meal plan, finds the required groceries at Picnic, and prepares your shopping cart. You only review and approve."
+
+This must be a real working application, not a static prototype or a collection of mock screens.
+
+
+====================================================================
+0. STARTING POINT: THE EXISTING APP (READ THIS FIRST)
+====================================================================
+
+Before writing any code, read the README, src/types/models.ts, src/lib/*, src/features/*, worker/*, db/schema.ts and drizzle/* and build a clear picture of what already exists.
+
+Base branch: start from `codex/health-app-build`. It contains everything on `main` plus 5 newer commits (latest: "Build adaptive Project 75 coaching system").
+
+What already exists and must be KEPT WORKING:
+
+* Stack: React + TypeScript + Vite client, Cloudflare Worker API (worker/index.ts), Cloudflare D1 database (binding "DB"), R2 storage (binding "MEDIA"), OpenAI Sites hosting (.openai/hosting.json), Recharts, lucide-react, Vitest, ESLint, pnpm.
+* Authentication: the ChatGPT/Sites identity comes from the trusted Sites authentication header. The client never chooses a user ID. Anonymous users can browse; their edits stay on the device.
+* Persistence: account-owned data in D1 table `project75_user_data` (one JSON payload per user, schema_version + revision-checked PUT /api/data), plus `project75_progress_photos` with images in R2. The offline browser copy uses localStorage key `cut-forward-data-v1`.
+* Existing features: onboarding, home dashboard, coach page with weekly check-ins and an adaptive coaching engine (src/lib/coachingEngine.ts), food logging with a food catalog and USDA / Open Food Facts search (worker/foodProviders.ts), barcode lookup, day planner with PlannedFoodEntry (statuses planned / consumed / skipped / changed), saved meals and saved day templates, nutrition evaluation, workout logger with adaptive training planner, exercise videos and anatomical muscle maps, body measurements, weight-loss plan projections (src/lib/weightLossPlan.ts), FitDays smart-scale screenshot import (OpenAI vision, rate limited), progress photos, full-account JSON backup/import with merge preview, and central selectors.
+* Tests: 22 Vitest test files covering migration, repository, merges, backups, selectors, nutrition, workouts, coaching and FitDays.
+
+Rules for working with the existing app:
+
+1. Preserve all existing user data. Every schema change needs a tested, idempotent migration. Never drop or reset existing records, weight history, food logs, workouts or photos.
+2. Keep internal identifiers that existing data depends on (D1 table names `project75_*`, the localStorage key, `project75Repository`) unless you write and test a safe migration. Renaming the product in the UI does NOT require renaming these.
+3. Reuse and extend the existing modules (nutrition, selectors, weightLossPlan, coachingEngine, bodyMeasurements, foodCatalog, foodProviders, PlannedFoodEntry, SavedMeal, SavedDayTemplate) instead of building parallel duplicates. Where an existing module conflicts with this specification, refactor it and keep its tests green or update them deliberately.
+4. Keep the workout logger, adaptive training planner, FitDays import, progress photos and backups. They become secondary features under the new navigation (see section 10), not deleted features.
+5. Rebrand the UI from "Project 75" to "Project 73". The previous 75 kg target becomes an intermediate milestone on the way to 73 kg.
+6. The current interface is in English. Project 73 must be in Dutch throughout (see section 13).
+7. `pnpm build`, `pnpm lint` and `pnpm test` must pass at the end of every phase.
+
+
+====================================================================
+1. PERSONAL USER PROFILE
+====================================================================
+
+Use the following values as the defaults for new accounts AND as the update for the existing account. Allow every field to be edited.
+
+* Age: 30 (the existing profile says 29; update it)
+* Sex for metabolic calculations: Male
+* Height: 174 cm
+* Current estimated weight: 85.5 kg (if the account already has logged weight measurements, use the most recent logged or smoothed weight instead and show where the value comes from)
+* Target weight: 73 kg
+* Previous, less aggressive target: 75 kg (keep as a milestone)
+* Desired timeframe: 12 months
+* Activity: Primarily sedentary office/computer work
+* Strength training: Currently limited; may increase to 2–3 home workouts per week
+* Primary objective: Sustainable fat loss
+* Secondary objective: Preserve muscle mass and strength
+* Country: Netherlands
+* Preferred supermarket: Picnic Netherlands
+* Household: One person
+* Default meal-planning horizon: 3 days
+* Cooking preference: Minimal preparation and cleanup, ideally 10–20 minutes
+* Language: Dutch
+* Currency: EUR
+* Units: Metric
+
+Migrating the existing account: change the active goal from 75 kg to 73 kg, keep the original starting weight and plan start date where they exist, and keep all history. Show the user a short summary of what changed. Do not silently overwrite values the user has already edited (calorie/protein targets, training days, equipment) — ask first.
+
+Preferred foods include:
+
+* Eggs
+* Chicken
+* Salmon
+* Lean minced beef
+* Skyr and low-fat quark
+* Oatmeal
+* Rice and pasta
+* Wholegrain wraps
+* Broccoli and bimi
+* Vegetables and fruit
+* Hummus and tzatziki
+* Simple oven and air-fryer meals
+
+Do not assume any allergies. Make allergens, dietary restrictions and disliked ingredients configurable.
+
+The user dislikes complicated recipes, constant calorie entry, extensive cooking, and repetitive administrative tasks.
+
+Design the application to minimize friction and manual input.
+
+
+====================================================================
+2. NUTRITION AND METABOLIC CALCULATIONS
+====================================================================
+
+Implement (or extend the existing code into) a deterministic nutrition calculation engine.
+
+Use the Mifflin-St Jeor equation to estimate basal metabolic rate (BMR) and calculate total daily energy expenditure (TDEE) using an editable activity factor.
+
+Recalculate when profile information changes.
+
+Suggested initial targets:
+
+* Estimated maintenance calories: approximately 2,150–2,250 kcal/day
+* Starting calorie target: approximately 1,800 kcal/day
+* Protein: 140 g/day
+* Desired weight-loss rate: approximately 0.25–0.5 kg/week
+* Goal: reach approximately 73 kg without unnecessary muscle loss
+
+Sanity check for unit tests: with the default profile (male, 30 years, 174 cm, 85.5 kg) Mifflin-St Jeor gives a BMR of about 1,798 kcal. An activity factor of 1.2 gives a TDEE of about 2,157 kcal, and 1.25 gives about 2,247 kcal. This matches the suggested maintenance range.
+
+Note on conflicting goals: losing 12.5 kg in 12 months is about 0.24 kg/week, while a 1,800 kcal target against about 2,200 kcal maintenance predicts roughly 0.35–0.45 kg/week (goal reached in about 7–9 months). The app must show both the timeframe-based and the target-based forecast, explain the difference in plain Dutch, and let the user choose. Do not silently pick one.
+
+These are estimates, not fixed medical truths.
+
+The app must:
+
+1. Calculate BMR and TDEE.
+2. Recommend a reasonable calorie deficit.
+3. Set protein targets appropriate for muscle preservation.
+4. Set sensible fat and carbohydrate targets.
+5. Include fiber and fruit/vegetable goals.
+6. Forecast progress toward the target weight (extend src/lib/weightLossPlan.ts).
+7. Adjust projections based on recorded weight changes.
+8. Warn against excessively aggressive deficits.
+9. Explain calculation assumptions in plain Dutch.
+10. Allow the user to override suggested targets.
+
+Never assume that estimated daily calorie expenditure is an exact measurement.
+
+Use deterministic code for arithmetic, quantities, macros, and progress calculations. AI must not invent numerical values.
+
+
+====================================================================
+3. MAIN APPLICATION DASHBOARD
+====================================================================
+
+Turn the existing Home page into the Project 73 dashboard: minimal, beautiful and mobile-first. Remove or move widgets that do not serve the questions below.
+
+The dashboard should immediately answer:
+
+* What do I weigh?
+* How much weight have I lost?
+* How far am I from my goal?
+* Am I progressing at the expected rate?
+* What should I eat today?
+* Do I have groceries planned for the next few days?
+
+Prominent dashboard elements:
+
+Weight progress
+
+* Current weight
+* Starting weight
+* Target weight (73 kg), with the 75 kg milestone shown subtly
+* Total kilograms lost
+* Remaining kilograms
+* Progress percentage
+* Estimated goal date
+
+Nutrition
+
+* Daily calorie target
+* Protein target
+* Today's planned meals
+* Planned calories and macros
+* Actual intake when available
+
+Shopping
+
+* Days of meals currently planned
+* Estimated grocery cost
+* Status of the Picnic connection
+* Button: "Plan mijn maaltijden"
+* Button: "Bereid boodschappen voor"
+
+Make the interface feel like a polished consumer app, not a technical dashboard.
+
+Use a modern design, excellent typography, subtle animations, rounded cards, dark/light mode, and clear visual hierarchy.
+
+Avoid unnecessary widgets.
+
+
+====================================================================
+4. AI-POWERED MEAL PLANNING
+====================================================================
+
+Create the central feature: an intelligent nutrition planner. Build it on the existing day planner (PlannedFoodEntry, SavedMeal, SavedDayTemplate) and food catalog rather than in parallel to it.
+
+The user can request:
+
+"Plan my food for the next 3 days."
+
+The application should automatically generate breakfast, lunch, dinner, and optionally one or two snacks.
+
+Each day must respect the user's calorie and protein targets as closely as practically possible.
+
+Meal-planning rules
+
+Prioritize:
+
+1. Calorie adherence
+2. Adequate protein
+3. Balanced nutrition
+4. Convenience
+5. Grocery availability
+6. Cost efficiency
+7. Food preferences
+8. Variety
+
+Meal plans should:
+
+* Favor simple supermarket ingredients.
+* Prefer recipes needing fewer than 20 minutes of active preparation.
+* Prefer meals that can be cooked in an oven or air fryer.
+* Reuse ingredients across multiple meals.
+* Allow batch cooking and leftovers.
+* Avoid buying large amounts for a single small serving.
+* Avoid requiring expensive specialist ingredients.
+* Keep the overall plan realistic for someone living alone.
+
+Example meals:
+
+Breakfast:
+
+* Low-fat quark, oats, strawberries and whey
+* Eggs with wholegrain bread
+
+Lunch:
+
+* Wholegrain chicken wraps with vegetables and tzatziki
+* High-protein salad
+
+Dinner:
+
+* Salmon, potatoes and broccoli
+* Lean minced beef with rice and vegetables
+* Simple pasta with chicken and tomato sauce
+
+Snacks:
+
+* Skyr
+* Fruit
+* Cottage cheese
+* Protein shake
+
+Each meal must show:
+
+* Meal name
+* Picture if available
+* Ingredients in grams or milliliters
+* Calories
+* Protein
+* Carbohydrates
+* Fat
+* Preparation time
+* Very simple cooking instructions
+* Number of portions
+* Ingredient availability status
+
+The user must be able to:
+
+* Replace a meal
+* Regenerate an entire day
+* Lock a meal and regenerate the others
+* Adjust portion sizes
+* Mark a meal as eaten
+* Save favorites
+* Reuse meals from previous weeks
+
+When replacing a meal, recalculate daily targets and shopping requirements.
+
+Important: AI should propose meal ideas, but actual nutrition values must come from verified food/product data where available (Picnic product nutrition, the existing local catalog, USDA, Open Food Facts). Flag estimates clearly, using the existing `dataCompleteness` and `source` fields on FoodItem.
+
+
+====================================================================
+5. REAL PICNIC SUPERMARKET INTEGRATION
+====================================================================
+
+This is a critical feature.
+
+Use the maintained unofficial Picnic API ecosystem:
+
+* https://github.com/MRVDH/picnic-api (npm: picnic-api)
+* https://github.com/MRVDH/picnic-mcp (npm: picnic-mcp)
+* https://github.com/MRVDH/picnic-web (reference web frontend)
+
+Re-verify the latest versions and methods when you start. Verified on 2 November 2026:
+
+* picnic-api 5.3.0 (published 23 October 2026). It has no runtime dependencies and uses the global `fetch`, so it should run inside the existing Cloudflare Worker (nodejs_compat is already enabled). Verify this with a real Worker build before you rely on it. If it does not run on Workers, isolate it behind a small adapter so it can be swapped or run in a separate service.
+* Client: `new PicnicClient({ countryCode: "NL", authKey, deviceId, ... })`.
+* Auth: `auth.login(email, password)` returns `{ authKey, userId, secondFactorAuthenticationRequired }`. Then `auth.generate2FACode("SMS")` and `auth.verify2FACode(code)` returns `{ authKey }`. Also `auth.logout()`. (Note: the README example says `verify2FA`, but the actual method is `verify2FACode`.)
+* Catalog: `catalog.getSearchResults(query)`, `catalog.getSuggestions(query)`, `catalog.getProduct(productId)` (price, nutrition, allergens, ingredients), `catalog.getImageUrl(imageId, size)`, `catalog.getFavorites()`, `catalog.getPromotions()`.
+* Cart: `cart.getCart()`, `cart.addProductToCart(productId, count)`, `cart.removeProductFromCart(productId, count)`, `cart.clearCart()`, `cart.getReplacements(productId)`, `cart.getDeliverySlots()`, `cart.setDeliverySlot(slotId)`, `cart.getMinimumOrderValue()`. Cart mutations return the updated cart.
+* Checkout: `checkout.startCheckout({ mts, resolveKey?, outOfStockArticleIds? })` (mts is the cart's modification timestamp; checkout fails when the cart changed since, so use this as a safety check). Then `checkout.initiatePayment(orderId, appReturnUrl)` returns a payment redirect / issuer authentication URL, followed by `checkout.getCheckoutStatus(transactionId)`, `checkout.confirmOrder(orderId)`, `checkout.getOrderStatus(orderId)` and `checkout.cancelCheckout(transactionId)`. Blocking issues (for example age verification) come back as `CheckoutIssueError`.
+* Errors: `PicnicApiError`, `CheckoutIssueError`, `UnexpectedPageFormatError`, `ProductNotFoundError`. Handle each one explicitly.
+* picnic-mcp 1.0.0 states explicitly that it "can't place an order". Do not assume MCP can complete checkout. Use picnic-api directly in the backend. picnic-mcp is useful as a reference for compact product matching (bestMatch / choices) and for privacy-conscious output.
+
+The Picnic integration must run exclusively through the secure backend (the existing Worker).
+
+Never expose authentication secrets or Picnic auth keys to frontend JavaScript.
+
+Required capabilities
+
+Account connection
+
+Provide a section in Instellingen where the user can connect their own Picnic account.
+
+Support the login and SMS 2FA flow.
+
+Do not store the Picnic password. Use it once to obtain the auth key and then discard it. Store only the auth key (and a stable per-user device ID), encrypted with AES-GCM via WebCrypto in a new D1 table, using an encryption key from a Worker secret.
+
+Provide connection testing, disconnect (logout plus deletion of stored keys), and a clear re-login flow when the key expires.
+
+Real product search
+
+For every required ingredient:
+
+* Search the real Picnic catalog.
+* Retrieve candidate products.
+* Retrieve product names, actual prices, package sizes, and nutritional information where available.
+* Determine suitable product matches.
+* Avoid products incompatible with the user's food restrictions.
+* Show unavailable items clearly.
+* Suggest reasonable replacements (use `cart.getReplacements` where useful).
+
+Never invent Picnic products, stock status, identifiers, or prices.
+
+Cache product lookups briefly and server-side, and show when the data was retrieved.
+
+Smart ingredient matching
+
+Example:
+
+The meal plan requires 450 grams of chicken across three meals.
+
+Picnic sells a 500-gram package.
+
+The app should recognize that one 500-gram package covers the requirement.
+
+Do not add three separate chicken packages.
+
+Apply the same logic to all groceries.
+
+Use explicit package quantities, edible amounts, and units.
+
+Handle:
+
+* Grams
+* Kilograms
+* Milliliters
+* Liters
+* Individual items
+* Multipacks
+* Variable-weight products where applicable
+
+Optimize purchases for total cost, usable quantity, nutrition, and minimal food waste.
+
+Include items the user already has at home through a simple pantry inventory.
+
+Do not order ingredients already available in sufficient quantity.
+
+Shopping cart management
+
+The user should see an overview of:
+
+* Meal plan
+* Consolidated shopping list
+* Matched Picnic products
+* Package quantities
+* Unit and total price
+* Estimated waste or surplus
+* Unavailable ingredients
+* Grand total (and Picnic's minimum order value)
+
+Allow users to manually replace or remove products.
+
+Implement reliable cart synchronization.
+
+Do not blindly append duplicate products.
+
+Read the existing Picnic cart first, calculate the necessary changes (diff), and show what will be added, modified, or removed.
+
+Never delete unrelated cart items without explicit approval. Never call `clearCart()` without explicit approval.
+
+Implement idempotency protection (server-side operation keys stored in D1) so repeated button presses do not accidentally double the cart quantities.
+
+After syncing, read the cart again and verify that it matches the expected state.
+
+Delivery
+
+* Fetch real available delivery slots.
+* Display available dates and times.
+* Allow the user to select a slot.
+
+Do not invent slot availability.
+
+Checkout and ordering
+
+The ideal experience is:
+
+1. AI creates meal plan.
+2. AI selects real Picnic products.
+3. AI calculates total cost.
+4. User reviews the final cart.
+5. User presses "Bestelling goedkeuren".
+6. The application proceeds through the supported checkout flow.
+
+Investigate whether the picnic-api checkout methods listed above can be implemented reliably and safely for the user's account.
+
+If supported and explicitly enabled (server flag PICNIC_CHECKOUT_ENABLED, off by default, plus a user setting), implement checkout through the backend with:
+
+* Clear itemized order review
+* Final price confirmation (compare the Picnic checkout total with the reviewed total and stop when they differ)
+* Explicit user authorization
+* Correct handling of payment authentication: open Picnic's payment / issuer URL for the user and return to the app. Never automate or bypass the bank or payment approval step.
+* No duplicate order submissions (an OrderAttempt record with an idempotency key, plus a lock while an attempt is in progress)
+* Order confirmation from Picnic (`confirmOrder` / `getOrderStatus`) before reporting success
+
+Never purchase groceries automatically without a deliberate confirmation action.
+
+If direct checkout cannot be implemented reliably, provide a one-click handoff to the official Picnic app with a synchronized cart. Clearly distinguish this fallback from completed ordering ("Je mandje staat klaar in Picnic — rond je bestelling af in de app" is NOT the same as "Bestelling geplaatst").
+
+Do not bypass authentication, anti-abuse mechanisms, or payment approval requirements.
+
+
+====================================================================
+6. INTELLIGENT GROCERY OPTIMIZATION ENGINE
+====================================================================
+
+This is a major differentiating feature.
+
+Do not simply generate recipes and add ingredients.
+
+The application should intelligently optimize the combination of meals and supermarket products.
+
+Example:
+
+The AI generates seven meals requiring 12 different ingredients.
+
+However, the supermarket only sells certain products in larger packages.
+
+Instead of buying unnecessary quantities, the AI should consider changing compatible meals to use the remaining ingredients.
+
+Build an optimization workflow:
+
+1. Generate candidate meals.
+2. Aggregate required ingredients.
+3. Find real purchasable products.
+4. Calculate package quantities and estimated cost.
+5. Identify surplus ingredients.
+6. Suggest compatible ingredient reuse or meal substitutions.
+7. Recalculate nutrition.
+8. Choose a practical plan.
+9. Present it for approval.
+
+The objective is to produce an affordable, realistic grocery basket while preserving nutritional requirements.
+
+Support a configurable grocery budget and maximum preparation time.
+
+Distinguish the cost of purchased groceries from the estimated cost of consumed portions. Surplus from one plan should flow into the pantry for the next plan.
+
+
+====================================================================
+7. WEIGHT TRACKING AND PROGRESS FEEDBACK
+====================================================================
+
+Reuse the existing body measurements, FitDays import, weight-loss plan projections and coaching engine. Extend them where needed.
+
+Allow quick logging of weight (one tap from the dashboard).
+
+The default experience should require very little effort.
+
+Features:
+
+* Weekly weigh-ins
+* Optional daily weigh-ins
+* Weight history
+* Starting vs current weight
+* Trend line
+* Predicted target trajectory
+* Weekly average
+* Comparison between expected and actual progress
+* Progress calendar
+
+Use smoothed weight trends (for example an exponentially weighted moving average) so that normal daily fluctuations are not treated as fat gain or loss.
+
+Intelligent coaching
+
+Adapt the existing coaching engine to the 73 kg goal and to planned versus eaten meals.
+
+For example:
+
+"Je bent de afgelopen vier weken 1,3 kg afgevallen. Dat past bij je geplande tempo. Ga door met je huidige doelen."
+
+Or:
+
+"Je gewicht is al drie weken stabiel. Laten we eerst kijken naar je calorie-inname en activiteit voordat we je doelen aanpassen."
+
+Do not automatically assume a plateau requires eating less.
+
+Only recommend calorie adjustments when there is sufficient reliable data.
+
+Protect protein intake and muscle preservation.
+
+Use the existing workout logs, step entries and training planner so the app can account for changes in exercise.
+
+Provide meaningful, concise coaching in Dutch without generic motivational messages.
+
+
+====================================================================
+8. REDUCE THE NEED FOR FOOD LOGGING
+====================================================================
+
+I do not want to manually enter everything I eat.
+
+The app should know the foods it has planned.
+
+If the user eats the suggested meal, allow a single button:
+
+"Gegeten"
+
+This records the planned meal as consumed.
+
+Offer quick adjustments:
+
+* Half gegeten (ate half)
+* Grotere portie (ate a larger portion)
+* Overgeslagen (skipped)
+* Iets anders gegeten (replaced with something else)
+
+Do not confuse planned food with confirmed consumption. The existing PlannedFoodEntry statuses (planned / consumed / skipped / changed) and the separate FoodLogEntry already support this. Extend them to whole meals and keep planned and actual intake strictly separate.
+
+Manual calorie entry and the existing food search remain available as an option, not as the default workflow.
+
+
+====================================================================
+9. SIMPLE AI ASSISTANT
+====================================================================
+
+Include a small integrated AI assistant (this can replace or absorb the current "Coach" tab's chat-style interactions).
+
+Users can type or speak (Web Speech API where supported) natural-language requests such as:
+
+* "Plan mijn eten voor drie dagen."
+* "Ik wil deze week minder uitgeven."
+* "Vervang zalm door kip."
+* "Ik heb nog rijst en eieren thuis."
+* "Ik wil vandaag niet koken."
+* "Waarom val ik niet af?"
+* "Maak de boodschappenlijst goedkoper."
+* "Zorg dat ik 140 gram eiwit binnenkrijg."
+
+The assistant should operate on structured application data and real backend tools (tool calling in the Worker).
+
+Do not give the assistant any access to payment or order placement.
+
+Any action that modifies the meal plan, pantry or cart must be shown to the user as a proposed change and applied only after the user confirms.
+
+Use structured outputs and Zod validation for AI-generated meal plans and substitutions. Reject and retry invalid output, and never let the model produce the final nutrition numbers.
+
+Provide deterministic fallback meal templates so planning still works when the AI provider is unavailable or not configured.
+
+The AI provider must be configurable. Default to OpenAI (OPENAI_API_KEY already exists for FitDays) behind a small provider interface so another provider (for example Anthropic) can be plugged in through environment variables.
+
+
+====================================================================
+10. FRONTEND PAGES AND NAVIGATION
+====================================================================
+
+Replace the current six English tabs (Home, Coach, Nutrition, Workout, Progress, Profile) with these five main Dutch pages:
+
+A. Dashboard
+The default landing page (evolves from the existing Home page).
+Current progress, calorie target, meal overview, and grocery status.
+
+B. Mijn voedingsplan
+Interactive 3-day and 7-day meal planners (evolves from the existing Nutrition page and day planner).
+Meal cards, nutrition totals, substitutions, simple recipes, "Gegeten" buttons. Food search / manual logging stays available here as a secondary action.
+
+C. Boodschappen (new)
+The entire Picnic preparation and checkout experience.
+Pantry, consolidated list, live product matches, quantities, prices, cart diff preview, delivery slots and order approval.
+
+D. Mijn voortgang
+Weight charts, history, adherence, weight forecasts and coaching insights (evolves from the existing Progress and Coach pages).
+The existing workout logger and training planner remain reachable from here as a "Training" section (and from a dashboard shortcut on training days). FitDays import and progress photos also stay here.
+
+E. Instellingen
+Profile, target weight, dietary preferences, allergens, disliked ingredients, grocery budget, maximum preparation time, pantry, meal preferences, AI configuration, Picnic account connection, backups/import (existing), and "Verwijder mijn gegevens".
+
+The AI assistant is available from every page (for example a floating button or a sheet), not as a separate tab.
+
+Make navigation extremely simple.
+
+The main user journey should take as few clicks as possible.
+
+
+====================================================================
+11. TECHNICAL ARCHITECTURE (ADAPTED TO THE EXISTING APP)
+====================================================================
+
+The original brief suggested Next.js, Prisma, PostgreSQL, Tailwind and shadcn/ui. Because a working, deployed app already exists, KEEP the current stack and do not migrate frameworks:
+
+* React + TypeScript + Vite (client)
+* Cloudflare Worker (API, Picnic integration, AI orchestration)
+* Cloudflare D1 (SQLite) with SQL migrations in drizzle/ (packaged into dist/.openai/drizzle/ as today)
+* R2 for images (existing)
+* OpenAI Sites hosting with the existing Sites authentication
+* Recharts (charts), lucide-react (icons)
+* The existing CSS design system in src/styles.css. Do not introduce Tailwind/shadcn unless it clearly improves quality, and if you do, migrate consistently rather than mixing two systems.
+* ADD Zod for input and output validation (API requests, AI output, Picnic responses, backups).
+* Pin dependency versions. Most dependencies in package.json are currently "latest", which is not reproducible. Pin them to the versions in pnpm-lock.yaml.
+
+Explain any further deviations in the README.
+
+Use a clean modular architecture separating:
+
+* User profile
+* Nutrition calculations
+* Meal planning
+* Recipe storage
+* Grocery matching
+* Shopping optimization
+* Picnic API client (behind an adapter interface: live adapter + mock adapter)
+* Cart synchronization
+* Checkout
+* Weight tracking
+* AI orchestration
+
+Persistent data models
+
+Map the requested models to the existing ones where possible:
+
+* UserProfile → existing UserProfile (extend it: activity factor, timeframe, household, horizon, prep time, budget, allergens, restrictions, dislikes, language, currency)
+* WeightEntry → existing BodyMeasurement
+* FoodProduct → existing FoodItem (+ Picnic product data)
+* FoodLog → existing FoodLogEntry
+* PlannedMeal → extend existing PlannedFoodEntry or add a meal-level entity that groups entries
+* NutritionTargets, Recipe, RecipeIngredient, MealPlan, PantryItem → new
+
+Server-authoritative entities MUST be real D1 tables with migrations, because they need server-side idempotency, authorization and secrets:
+
+* IntegrationSettings (encrypted Picnic auth key, device ID, connection status, checkout enabled)
+* ShoppingPlan
+* ShoppingItem
+* GroceryProductMatch
+* CartSyncOperation (idempotency key, planned diff, result, verification)
+* OrderAttempt (idempotency key, status, Picnic order ID, totals, timestamps)
+* Picnic product cache
+
+The meal-planning entities (NutritionTargets, Recipe, RecipeIngredient, MealPlan, PlannedMeal, PantryItem) may either live in the existing account payload (bump schema_version with a tested migration in src/lib/appDataMigration.ts) or in new D1 tables. Choose one approach, explain why, and document it.
+
+Add appropriate timestamps, validation and database migrations. Every query must be scoped to the authenticated user ID.
+
+Ensure database persistence actually works (local D1 via wrangler and the deployed Sites D1).
+
+
+====================================================================
+12. RELIABILITY AND SECURITY
+====================================================================
+
+This app handles personal health-related information, supermarket credentials and potential purchases.
+
+Requirements:
+
+* All secrets stored server-side as Worker secrets (never in .env files committed to git; extend .env.example with placeholders only)
+* No credentials inside source control
+* No sensitive data in client responses or application logs (no auth keys, passwords, addresses or payment data)
+* Encrypted storage (AES-GCM, key from PICNIC_TOKEN_ENCRYPTION_KEY) for integration tokens
+* Use the existing authenticated Sites sessions. Picnic, shopping and checkout endpoints must require a signed-in user. Anonymous / demo users can use the meal planner, but only with the mock adapter.
+* Input validation (Zod) and authorization checks on every endpoint
+* Safe error handling with Dutch, user-friendly messages
+* Rate limiting (reuse the existing FitDays rate-limit approach) and reasonable retries with backoff for Picnic and AI calls. Never retry non-idempotent cart or checkout calls blindly.
+* No repeated order submissions
+* No accidental shopping cart duplication
+* No misleading checkout success messages
+* Ability to disconnect Picnic and to delete all stored user information (D1 rows, R2 photos, integration secrets)
+
+Treat the Picnic integration as unofficial and potentially unstable (Picnic is moving pages to RSC; picnic-api can throw UnexpectedPageFormatError). Degrade gracefully and show a clear message when it breaks.
+
+Add a mock Picnic adapter for development and automated tests, but make production use the real Picnic services when connected.
+
+Never silently show mock data as real supermarket data.
+
+Clearly label demo mode with a visible banner and on every mock price/product.
+
+Suggested new environment variables (add them to .env.example and the README):
+
+* PICNIC_MODE = mock | live
+* PICNIC_COUNTRY_CODE = NL
+* PICNIC_TOKEN_ENCRYPTION_KEY (32-byte base64)
+* PICNIC_CHECKOUT_ENABLED = false
+* AI_PROVIDER = openai (default) | anthropic
+* AI_MODEL (optional override)
+* ANTHROPIC_API_KEY (optional)
+* existing: OPENAI_API_KEY, OPENAI_VISION_MODEL, FITDAYS_SESSION_SECRET, USDA_API_KEY
+
+
+====================================================================
+13. UI DESIGN EXPECTATIONS
+====================================================================
+
+Aim for the quality of a premium nutrition app. Refine the existing visual style; do not throw it away.
+
+The visual direction should be:
+
+* Modern
+* Minimal
+* Sophisticated
+* Calm
+* Easy to navigate
+* Mobile-first
+* Excellent on iPhone (safe areas, bottom navigation, large tap targets)
+* Fully responsive on desktop
+
+Use compact, informative cards and intuitive controls.
+
+Support dark mode.
+
+Use progress visuals sparingly and meaningfully.
+
+Do not build a cluttered fitness dashboard.
+
+The application should feel easy enough to use every three days without becoming another administrative task.
+
+Use Dutch throughout the interface, including the existing screens (onboarding, workout logger, coaching texts, errors, empty states). Use Dutch number, date and currency formatting (nl-NL, EUR, comma as decimal separator).
+
+
+====================================================================
+14. PRIMARY USER JOURNEY (ACCEPTANCE TEST)
+====================================================================
+
+Implement and test this complete scenario.
+
+Starting state
+
+User:
+
+* Weighs 85.5 kg
+* Wants to reach 73 kg
+* Targets approximately 1,800 kcal daily
+* Targets 140 g protein daily
+* Lives alone
+* Prefers little cooking
+* Wants three days of food
+
+Action 1
+
+User clicks: "Plan mijn maaltijden"
+
+Expected: the app calculates nutritional targets and creates a complete three-day meal plan.
+
+Action 2
+
+User clicks: "Zoek boodschappen bij Picnic" (same action as "Bereid boodschappen voor" on the dashboard)
+
+Expected: the backend searches actual Picnic products, matches meal ingredients, calculates package quantities, checks availability and prepares the shopping list.
+
+Action 3
+
+User reviews the basket.
+
+Expected: the app displays real product names, prices and quantities. The user can make substitutions and see the updated total.
+
+Action 4
+
+User clicks: "Vul mijn Picnic-winkelmandje"
+
+Expected: the real Picnic cart is synchronized successfully without duplicates or unwanted removal of existing items. Pressing the button twice does not change the result.
+
+Action 5
+
+User selects a delivery slot and approves checkout.
+
+Expected: if supported and configured, proceed with explicit approval and verify order confirmation. Otherwise provide a clearly labeled official Picnic handoff.
+
+Action 6
+
+User eats meals ("Gegeten") and records a new weight one week later.
+
+Expected: the progress dashboard updates and the coaching engine reassesses progress.
+
+Additional acceptance check for the existing app: an account with existing Project 75 data (weights, food logs, workouts, photos) opens after the upgrade with all data intact and the goal moved to 73 kg.
+
+This complete workflow is the primary acceptance test.
+
+
+====================================================================
+15. DEVELOPMENT EXECUTION REQUIREMENTS
+====================================================================
+
+Important: Do not stop after generating a project plan.
+
+Actually build and wire the application.
+
+Development sequence:
+
+Phase 0: Orientation and safety net
+
+Read the existing code. Make sure build, lint and tests pass before changing anything. Write a short architecture note (docs/project-73-architecture.md) covering how the new modules fit into the existing ones.
+
+Phase 1: Functional foundation
+
+Rebrand to Project 73, Dutch UI, new 5-page navigation, profile extension and migration (75 → 73 kg), Mifflin-St Jeor / TDEE engine, weight logging and trend, and the new dashboard.
+
+Phase 2: Meal planning
+
+Actual meal plan generation (deterministic templates first, AI on top), verified nutrition calculations, recipe management, portion adjustments, "Gegeten" tracking, favorites and reuse.
+
+Phase 3: Grocery optimization
+
+Pantry, ingredient consolidation, unit conversion, package-aware quantity calculations, product matching against the mock adapter, and grocery cost optimization.
+
+Phase 4: Picnic integration
+
+Encrypted account connection with 2FA, real product search, real prices, cart diff and idempotent sync, delivery slots, and safe checkout behind the flag or the official Picnic handoff.
+
+Phase 5: AI assistant
+
+Tool-calling assistant with Zod-validated structured output, confirmation of changes, and deterministic fallback.
+
+Phase 6: Quality assurance
+
+Test complete user workflows.
+
+Include Vitest unit tests for:
+
+* Metabolic calculations (BMR/TDEE fixture from section 2)
+* Macro calculations
+* Recipe portion scaling
+* Ingredient unit conversion
+* Grocery quantity consolidation
+* Package rounding (450 g needed + 500 g package = 1 package)
+* Shopping cart idempotency
+* Cart diffing (never removing unrelated items)
+* Weight-trend calculations
+* Data migration from the existing Project 75 payload
+
+Include integration tests using mocked Picnic responses (shaped like real picnic-api 5.x types), an end-to-end test of the primary journey (Playwright) against the mock adapter, plus a clearly documented manual live integration test.
+
+Do not send real orders during automated tests. Live tests must never call checkout.
+
+Provide:
+
+* Complete source code in this repository
+* Working development environment (pnpm dev with local D1)
+* Updated .env.example
+* Database schema and migrations
+* Updated README (rename to Project 73)
+* Setup instructions
+* Configuration instructions for Picnic
+* Configuration instructions for the AI provider
+* Deployment guidance (Sites / Cloudflare, secrets, migrations)
+* An explicit list of features that require real account credentials or manual verification
+
+Whenever an integration cannot be completed, clearly document the limitation and provide a functional alternative.
+
+Do not pretend unfinished functionality works.
+
+Commit in logical steps per phase with clear messages.
+
+
+====================================================================
+16. DEFINITION OF DONE
+====================================================================
+
+The app is successful when the user can:
+
+1. Open a polished, Dutch frontend branded Project 73.
+2. View their personal weight-loss target (73 kg) and nutrition needs.
+3. Generate three days of meals.
+4. Edit or replace meals.
+5. See accurate planned calories and protein.
+6. Convert meal ingredients into a consolidated grocery list.
+7. Match ingredients to actual available Picnic products.
+8. See real package quantities and prices.
+9. Review and synchronize the shopping cart.
+10. Approve checkout or continue safely in Picnic.
+11. Log their weight and see progress over time.
+12. Reuse the application three days later without repeating setup.
+13. Still use all existing data and features (workouts, FitDays, photos, backups) without loss.
+
+Final priority
+
+Focus on the real end-to-end user journey.
+
+A simple application that reliably plans meals and prepares a real Picnic order is significantly more valuable than a beautiful interface full of simulated functionality.
+
+Make reasonable engineering decisions autonomously, work through implementation problems, and complete as much of the working application as possible.

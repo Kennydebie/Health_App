@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { foodMap } from '../data/foods';
-import { entryMacros, servingAmount } from './nutrition';
+import { createFoodSnapshot, entryMacros, servingAmount } from './nutrition';
 
 describe('nutrition calculations', () => {
   it('calculates 120 g and 180 g banana from the stored serving multiplier', () => {
@@ -19,5 +19,13 @@ describe('nutrition calculations', () => {
     const entry = { servingId: 'medium', quantity: 1 };
     expect(servingAmount(banana, entry)).toBe(118);
     expect(Math.round(entryMacros(banana, entry).calories)).toBe(105);
+  });
+
+  it('uses the immutable log snapshot when a provider food later changes', () => {
+    const banana = foodMap.get('banana')!;
+    const snapshot = createFoodSnapshot(banana, 'medium', 1)!;
+    const changedProviderRecord = { ...banana, calories: 999, protein: 99 };
+    expect(entryMacros(changedProviderRecord, { servingId: 'medium', quantity: 1, snapshot }).calories).toBe(snapshot.calculated.calories);
+    expect(entryMacros(changedProviderRecord, { servingId: 'medium', quantity: 1, snapshot }).protein).toBe(snapshot.calculated.protein);
   });
 });

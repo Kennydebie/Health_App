@@ -181,7 +181,7 @@ describe('adaptive workout planner', () => {
     const plan = data.trainingPlanner.dailyPlans.find((item) => item.date === monday)!;
     expect(plan.selectedSessionTemplateId).toBe('upper_a');
     expect(plan.recommendedSessionTemplateId).toBe('mobility_recovery');
-    expect(plan.recommendationReason).toContain('significant joint discomfort');
+    expect(plan.recommendationReason).toContain('flinke gewrichtsklachten');
   });
 
   it('preserves completed history across week rollover and handles Sunday-to-Monday boundaries', () => {
